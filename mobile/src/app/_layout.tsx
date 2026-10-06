@@ -12,7 +12,7 @@ export default function RootLayout() {
       <Stack.Protected guard={!session}>
         <Stack.Screen name="sign-in" /><Stack.Screen name="register" />
       </Stack.Protected>
-      <Stack.Protected guard={!!session}><Stack.Screen name="index" /></Stack.Protected>
+      <Stack.Protected guard={!!session}><Stack.Screen name="index" /><Stack.Screen name="jobs" /></Stack.Protected>
     </Stack>}
   </UIProvider></SafeAreaProvider>;
 }

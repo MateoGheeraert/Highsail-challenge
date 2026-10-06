@@ -51,8 +51,8 @@ test('authentication and owned job persistence through the HTTP API', async (t) 
     await app.listen(0, '127.0.0.1');
     const base = await app.getUrl();
     const prisma = app.get(PrismaService);
-    const request = (path, cookie, body) => fetch(`${base}/api${path}`, {
-      method: body ? 'POST' : 'GET',
+    const request = (path, cookie, body, method = body ? 'POST' : 'GET') => fetch(`${base}/api${path}`, {
+      method,
       headers: { ...(cookie ? { Cookie: cookie } : {}), ...(body ? { 'Content-Type': 'application/json', Origin: 'http://localhost:8081' } : {}) },
       ...(body ? { body: JSON.stringify(body) } : {}),
     });
@@ -67,11 +67,11 @@ test('authentication and owned job persistence through the HTTP API', async (t) 
     await t.test('seed is repeatable and does not overwrite committed values', async () => {
       const seed = () => execFileSync(process.execPath, ['dist/prisma/seed.js'], { env: process.env, timeout: 30_000 });
       seed();
-      const job = await prisma.job.findFirstOrThrow();
+      const job = await prisma.job.findFirstOrThrow({ where: { title: { contains: 'cable installation' } } });
       jobId = job.id;
       await prisma.job.update({ where: { id: jobId }, data: { generalRemarks: 'Keep this value' } });
       seed();
-      assert.equal(await prisma.job.count(), 1);
+      assert.equal(await prisma.job.count(), 3);
       assert.equal((await prisma.job.findUniqueOrThrow({ where: { id: jobId } })).generalRemarks, 'Keep this value');
     });
     await t.test('login issues a working session cookie', async () => {
@@ -96,6 +96,38 @@ test('authentication and owned job persistence through the HTTP API', async (t) 
       const otherCookie = response.headers.getSetCookie().map((value) => value.split(';')[0]).join('; ');
       assert.deepEqual(await (await request('/jobs', otherCookie)).json(), []);
       assert.equal((await request(`/jobs/${jobId}`, otherCookie)).status, 404);
+      assert.equal((await request(`/jobs/${jobId}`, otherCookie, { title: 'Stolen' }, 'PATCH')).status, 404);
+      assert.equal((await request(`/jobs/${jobId}`, otherCookie, undefined, 'DELETE')).status, 404);
+    });
+    await t.test('jobs support validated, owned CRUD and cascade deletion', async () => {
+      assert.equal((await request('/jobs', null, { title: 'Unauthorized' })).status, 401);
+      for (const body of [{ title: ' ' }, { title: 'x', priority: 'critical' }, { title: 'x', ownerId: 'someone' }, { title: 'x', jobComplete: 'yes' }]) {
+        assert.equal((await request('/jobs', cookie, body)).status, 400);
+      }
+      const created = await request('/jobs', cookie, { title: '  New installation  ', generalRemarks: 'Inspect first', priority: 'medium', jobComplete: false });
+      assert.equal(created.status, 201);
+      const job = await created.json();
+      assert.equal(job.title, 'New installation');
+      assert.ok((await (await request('/jobs', cookie)).json()).some(item => item.id === job.id));
+      const material = await prisma.material.create({ data: { jobId: job.id, material: 'Cable', quantity: 2, unit: 'm' } });
+      const updated = await request(`/jobs/${job.id}`, cookie, { title: 'Finished installation', generalRemarks: null, priority: null, jobComplete: true }, 'PATCH');
+      assert.equal(updated.status, 200);
+      const saved = await (await request(`/jobs/${job.id}`, cookie)).json();
+      assert.equal(saved.title, 'Finished installation');
+      assert.equal(saved.jobComplete, true);
+      assert.equal(saved.generalRemarks, null);
+      assert.equal(saved.priority, null);
+      assert.equal(saved.version, 1);
+      assert.equal(saved.materials[0].id, material.id);
+      assert.equal((await request(`/jobs/${job.id}`, cookie, {}, 'PATCH')).status, 400);
+      const rejected = await fetch(`${base}/api/jobs/${job.id}`, {
+        method: 'DELETE', headers: { Cookie: cookie, Origin: 'https://untrusted.example' },
+      });
+      assert.equal(rejected.status, 403);
+      assert.equal((await request(`/jobs/${job.id}`, cookie, undefined, 'DELETE')).status, 204);
+      assert.equal((await request(`/jobs/${job.id}`, cookie)).status, 404);
+      assert.equal(await prisma.material.count({ where: { jobId: job.id } }), 0);
+      assert.equal((await request(`/jobs/${job.id}`, cookie, undefined, 'DELETE')).status, 404);
     });
     await t.test('signup survives slow transaction acquisition and persists a complete account', async () => {
       delayNextTransaction = true;

@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Req, UseGuards } from '@nestjs/common';
 import { SessionGuard, type AuthenticatedRequest } from '../auth/session.guard.js';
 import { FORM_SCHEMA } from './form-schema.js';
 import { JobsService } from './jobs.service.js';
@@ -10,6 +10,22 @@ export class JobsController {
 
   @Get('schema')
   schema() { return FORM_SCHEMA; }
+
+  @Post()
+  create(@Req() request: AuthenticatedRequest, @Body() body: unknown) {
+    return this.jobs.create(request.authSession.user.id, body);
+  }
+
+  @Patch(':id')
+  update(@Req() request: AuthenticatedRequest, @Param('id') id: string, @Body() body: unknown) {
+    return this.jobs.update(request.authSession.user.id, id, body);
+  }
+
+  @Delete(':id')
+  @HttpCode(204)
+  delete(@Req() request: AuthenticatedRequest, @Param('id') id: string) {
+    return this.jobs.delete(request.authSession.user.id, id);
+  }
 
   @Get()
   list(@Req() request: AuthenticatedRequest) {

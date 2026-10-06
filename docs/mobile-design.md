@@ -64,7 +64,7 @@ and the backend minimum. Sign-in only checks that a password is present.
 Submitting disables the form and navigation action. Request errors preserve input and
 offer a retry. Better Auth manages sessions with SecureStore on native platforms and
 browser cookies on web. Protected routes prevent returning to auth screens while signed
-in. The initial authenticated screen is a welcome/sign-out screen; job UI is future work.
+in. The initial authenticated screen lists owned jobs with creation and sign-out actions. Job details support editing and confirmed deletion. The speaking screen is a placeholder with a disabled recording action.
 
 ## Implementation references
 

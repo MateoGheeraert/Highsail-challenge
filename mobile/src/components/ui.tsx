@@ -42,7 +42,7 @@ export function Button({ children, onPress, variant = 'primary', loading, disabl
   </PaperButton>;
 }
 
-type FieldProps = Pick<TextInputProps, 'value' | 'onChangeText' | 'autoComplete' | 'textContentType' | 'keyboardType' | 'returnKeyType' | 'onSubmitEditing' | 'autoCapitalize' | 'maxLength'> & {
+type FieldProps = Pick<TextInputProps, 'value' | 'onChangeText' | 'autoComplete' | 'textContentType' | 'keyboardType' | 'returnKeyType' | 'onSubmitEditing' | 'autoCapitalize' | 'maxLength' | 'multiline'> & {
   label: string; password?: boolean; error?: string; hint?: string; disabled?: boolean;
 };
 export function TextField({ label, password, error, hint, disabled, ...props }: FieldProps) {

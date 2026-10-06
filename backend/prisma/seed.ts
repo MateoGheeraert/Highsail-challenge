@@ -22,7 +22,18 @@ try {
     create: { id: `demo-job-${user.id}`, title: 'Demo job — cable installation', ownerId: user.id },
     update: {},
   });
-  console.log('Demo user and job are ready. Existing job values were preserved.');
+  for (const job of [
+    { key: 'inspection', title: 'Boiler inspection', priority: 'high' as const, generalRemarks: 'Check the pressure and inspect the connections.', jobComplete: false },
+    { key: 'maintenance', title: 'Ventilation maintenance', priority: 'low' as const, generalRemarks: 'Filters replaced and airflow checked.', jobComplete: true },
+  ]) {
+    const { key, ...data } = job;
+    await prisma.job.upsert({
+      where: { id: `demo-${key}-${user.id}` },
+      create: { id: `demo-${key}-${user.id}`, ownerId: user.id, ...data },
+      update: {},
+    });
+  }
+  console.log('Demo user and three jobs are ready. Existing job values were preserved.');
 } finally {
   await prisma.$disconnect();
 }
