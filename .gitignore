@@ -9,3 +9,5 @@ coverage/
 *.db-shm
 *.db-wal
 backend/src/generated/
+mobile/.expo/
+mobile/expo-env.d.ts

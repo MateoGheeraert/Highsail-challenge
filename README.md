@@ -1,8 +1,8 @@
 # Formcast
 
-NestJS backend foundation for the live voice form challenge. The Expo app and audio/inference/proposal pipeline are the next stage.
+NestJS backend and Expo mobile authentication for the live voice form challenge. The audio/inference/proposal pipeline is the next stage.
 
-The backend uses NestJS 11 (Express 5), Better Auth with its Expo plugin, Prisma 7, and PostgreSQL hosted on Neon. `docs/techstack.md` was empty when this foundation was started.
+The backend uses NestJS 11 (Express 5), Better Auth with its Expo plugin, Prisma 7, and PostgreSQL hosted on Neon. The mobile app uses Expo Router, React Native Paper behind shared UI wrappers, and NativeWind. See [mobile setup](mobile/README.md) and the [mobile design guide](docs/mobile-design.md).
 
 ## Run the backend
 
@@ -12,7 +12,7 @@ Requires Node.js 22.12+ (Node 24 recommended). Run commands from `backend/`. On 
 npm ci
 ```
 
-Copy `backend/.env.example` to `backend/.env`. Set `DATABASE_URL` to your Neon PostgreSQL connection string with `sslmode=require`. Optionally set `DIRECT_URL` to an unpooled connection for Prisma CLI migrations; otherwise migrations use `DATABASE_URL`. Generate a secret with the following command and place the output in `BETTER_AUTH_SECRET`. Set `DEMO_PASSWORD` to a password of at least 12 characters.
+Copy `backend/.env.example` to `backend/.env`. Set `DATABASE_URL` to your Neon PostgreSQL connection string with `sslmode=verify-full` (explicit certificate and hostname verification). Optionally set `DIRECT_URL` to an unpooled connection for Prisma CLI migrations; otherwise migrations use `DATABASE_URL`. Generate a secret with the following command and place the output in `BETTER_AUTH_SECRET`. Set `DEMO_PASSWORD` to a password of at least 12 characters.
 
 ```sh
 node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
@@ -23,6 +23,13 @@ npm run start:dev
 ```
 
 The API listens on port 3000. The seed creates one demo technician and one empty demo job. Running it again preserves existing job values and does not reset the user's password. Sign in with `DEMO_EMAIL` and `DEMO_PASSWORD` from your environment.
+
+Hosted database connections can take a few seconds after idle periods. The PostgreSQL
+driver allows 15 seconds to acquire a connection; Prisma allows 20 seconds to start
+a transaction and 10 seconds to execute it. Mobile auth requests allow 45 seconds.
+This avoids Prisma's default 2-second acquisition timeout ending auth requests before
+the driver can connect. Transactions remain enabled; a database outage or exhausted
+pool can still cause a timeout. Restart the backend after changing `.env` settings.
 
 `npm start` runs the compiled app. `npm run db:migrate -- --name your_change` creates a development migration; `npm run db:deploy` applies checked-in migrations. `npm run db:studio` opens the database viewer.
 
@@ -52,7 +59,7 @@ The database stores committed scalar fields on `Job` and repeating rows in `Mate
 
 Next: streamed/chunked audio → transcription/inference → validated proposal operations → in-memory proposal state → live client updates. Finish must validate and apply all remaining proposals in one transaction, checking the job version; Cancel must discard them without changing committed data. No job mutation endpoints or proposal persistence are implemented yet.
 
-Known limits: no mobile UI, audio, inference, Finish/Cancel, email verification, password reset, or social login yet. Authentication uses email/password and a single-process rate limiter. The planned in-memory proposal layer is intended for a single backend instance. Future write endpoints must enforce the form's value constraints and appropriate CSRF/origin checks.
+Known limits: mobile UI currently covers authentication and a welcome screen; no job UI, audio, inference, Finish/Cancel, email verification, password reset, or social login yet. Authentication uses email/password and a single-process rate limiter. The planned in-memory proposal layer is intended for a single backend instance. Future write endpoints must enforce the form's value constraints and appropriate CSRF/origin checks.
 
 ## Verification
 

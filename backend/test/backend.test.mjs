@@ -4,6 +4,8 @@ import { randomBytes } from 'node:crypto';
 import 'dotenv/config';
 import pg from 'pg';
 import { execFileSync } from 'node:child_process';
+import { setTimeout as delay } from 'node:timers/promises';
+import { PrismaPg } from '@prisma/adapter-pg';
 
 test('authentication and owned job persistence through the HTTP API', async (t) => {
   const connectionString = process.env.TEST_DATABASE_URL || process.env.DATABASE_URL;
@@ -30,6 +32,21 @@ test('authentication and owned job persistence through the HTTP API', async (t) 
     execFileSync(process.execPath, ['node_modules/prisma/build/index.js', 'migrate', 'deploy'], { env: process.env, timeout: 60_000 });
     const { createApp } = await import('../dist/src/app.js');
     const { PrismaService } = await import('../dist/src/database/prisma.service.js');
+    let delayNextTransaction = false;
+    const connect = PrismaPg.prototype.connect;
+    t.mock.method(PrismaPg.prototype, 'connect', async function (...args) {
+      const adapter = await connect.apply(this, args);
+      const startTransaction = adapter.startTransaction.bind(adapter);
+      adapter.startTransaction = async (...transactionArgs) => {
+        if (delayNextTransaction) {
+          delayNextTransaction = false;
+          // Simulate acquisition taking longer than Prisma's old 2-second limit.
+          await delay(2500);
+        }
+        return startTransaction(...transactionArgs);
+      };
+      return adapter;
+    });
     app = await createApp();
     await app.listen(0, '127.0.0.1');
     const base = await app.getUrl();
@@ -79,6 +96,18 @@ test('authentication and owned job persistence through the HTTP API', async (t) 
       const otherCookie = response.headers.getSetCookie().map((value) => value.split(';')[0]).join('; ');
       assert.deepEqual(await (await request('/jobs', otherCookie)).json(), []);
       assert.equal((await request(`/jobs/${jobId}`, otherCookie)).status, 404);
+    });
+    await t.test('signup survives slow transaction acquisition and persists a complete account', async () => {
+      delayNextTransaction = true;
+      const response = await request('/auth/sign-up/email', null, {
+        name: 'Slow Connection', email: 'slow@example.com', password: randomBytes(24).toString('hex'),
+      });
+      assert.equal(response.status, 200, await response.text());
+      assert.equal(delayNextTransaction, false, 'Auth must acquire a real transaction');
+      const slowCookie = response.headers.getSetCookie().map((value) => value.split(';')[0]).join('; ');
+      assert.equal((await request('/me', slowCookie)).status, 200);
+      const user = await prisma.user.findUniqueOrThrow({ where: { email: 'slow@example.com' } });
+      assert.equal(await prisma.account.count({ where: { userId: user.id } }), 1);
     });
     await t.test('invalid passwords and untrusted origins are rejected', async () => {
       assert.equal((await request('/auth/sign-in/email', null, { email: process.env.DEMO_EMAIL, password: 'wrong-password' })).status, 401);
