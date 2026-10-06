@@ -1,30 +1,41 @@
-import { Platform } from 'react-native';
-import { authClient } from '@/lib/auth-client';
+import { apiRequest } from "@/lib/api";
 
 export type Job = {
-  id: string; title: string; generalRemarks: string | null;
-  priority: 'low' | 'medium' | 'high' | null; jobComplete: boolean | null;
-  version: number; updatedAt: string;
+  id: string;
+  title: string;
+  generalRemarks: string | null;
+  priority: "low" | "medium" | "high" | null;
+  jobComplete: boolean | null;
+  version: number;
+  updatedAt: string;
+  arrivalTime: string | null;
+  distanceKm: number | null;
+  tags: string[];
+  materials: Material[];
 };
-export type JobInput = Pick<Job, 'title' | 'generalRemarks' | 'priority' | 'jobComplete'>;
+export type Material = {
+  id: string;
+  material: string;
+  quantity: number;
+  unit: "m" | "pcs";
+  position: number;
+};
+export type JobSummary = Pick<
+  Job,
+  "id" | "title" | "jobComplete" | "priority" | "version" | "updatedAt"
+>;
+export type JobInput = Pick<
+  Job,
+  "title" | "generalRemarks" | "priority" | "jobComplete"
+>;
 
-async function request<T>(path: string, method = 'GET', body?: JobInput): Promise<T> {
-  const cookie = Platform.OS === 'web' ? undefined : await authClient.getCookie();
-  const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000'}/api/jobs${path}`, {
-    method, credentials: Platform.OS === 'web' ? 'include' : 'omit',
-    headers: { ...(cookie ? { Cookie: cookie } : {}), ...(body ? { 'Content-Type': 'application/json' } : {}) },
-    ...(body ? { body: JSON.stringify(body) } : {}), signal: AbortSignal.timeout(45000),
-  });
-  if (!response.ok) {
-    const data = await response.json().catch(() => null);
-    throw new Error(data?.message || 'Could not save or load jobs. Please try again.');
-  }
-  return response.status === 204 ? undefined as T : response.json();
-}
+const request = <T>(path: string, method = "GET", body?: JobInput) =>
+  apiRequest<T>(`/jobs${path}`, method, body);
 export const jobsApi = {
-  list: () => request<Job[]>(''),
+  list: () => request<JobSummary[]>(""),
   get: (id: string) => request<Job>(`/${encodeURIComponent(id)}`),
-  create: (body: JobInput) => request<Job>('', 'POST', body),
-  update: (id: string, body: JobInput) => request<Job>(`/${encodeURIComponent(id)}`, 'PATCH', body),
-  delete: (id: string) => request<void>(`/${encodeURIComponent(id)}`, 'DELETE'),
+  create: (body: JobInput) => request<Job>("", "POST", body),
+  update: (id: string, body: JobInput) =>
+    request<Job>(`/${encodeURIComponent(id)}`, "PATCH", body),
+  delete: (id: string) => request<void>(`/${encodeURIComponent(id)}`, "DELETE"),
 };

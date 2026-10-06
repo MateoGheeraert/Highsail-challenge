@@ -1,16 +1,19 @@
-import { betterAuth } from 'better-auth';
-import { prismaAdapter } from 'better-auth/adapters/prisma';
-import { expo } from '@better-auth/expo';
-import type { PrismaClient } from '../generated/prisma/client.js';
-import type { AppConfig } from '../config.js';
+import { betterAuth } from "better-auth";
+import { prismaAdapter } from "better-auth/adapters/prisma";
+import { expo } from "@better-auth/expo";
+import type { PrismaClient } from "../generated/prisma/client.js";
+import type { AppConfig } from "../config.js";
 
 export function createAuth(prisma: PrismaClient, config: AppConfig) {
   return betterAuth({
-    appName: 'Formcast',
+    appName: "Formcast",
     baseURL: config.BETTER_AUTH_URL,
-    basePath: '/api/auth',
+    basePath: "/api/auth",
     secret: config.BETTER_AUTH_SECRET,
-    database: prismaAdapter(prisma, { provider: 'postgresql', transaction: true }),
+    database: prismaAdapter(prisma, {
+      provider: "postgresql",
+      transaction: true,
+    }),
     trustedOrigins: config.TRUSTED_ORIGINS,
     emailAndPassword: { enabled: true, minPasswordLength: 12 },
     plugins: [expo()],
@@ -21,6 +24,6 @@ export function createAuth(prisma: PrismaClient, config: AppConfig) {
   });
 }
 
-export const AUTH = Symbol('AUTH');
+export const AUTH = Symbol("AUTH");
 export type Auth = ReturnType<typeof createAuth>;
-export type AuthSession = Auth['$Infer']['Session'];
+export type AuthSession = Auth["$Infer"]["Session"];

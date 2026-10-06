@@ -3,7 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=22.12.0" },
+  "engines": {
+    "node": ">=22.12.0"
+  },
   "scripts": {
     "build": "prisma generate && tsc -p tsconfig.json",
     "start": "node dist/src/main.js",
@@ -13,26 +15,36 @@
     "db:deploy": "prisma migrate deploy",
     "db:seed": "node dist/prisma/seed.js",
     "db:studio": "prisma studio",
-    "test": "npm run build && node --test test/*.test.mjs"
+    "test": "npm run build && node --test test/*.test.mjs",
+    "test:voice": "npm run build && node --test test/voice.test.mjs",
+    "test:voice:live": "npm run build && node scripts/voice-smoke.mjs",
+    "format": "prettier . --write",
+    "format:check": "prettier . --check"
   },
   "dependencies": {
     "@better-auth/expo": "^1.6.0",
     "@nestjs/common": "^11.0.0",
     "@nestjs/core": "^11.0.0",
     "@nestjs/platform-express": "^11.0.0",
+    "@nestjs/platform-ws": "^11.2.7",
+    "@nestjs/websockets": "^11.2.7",
     "@prisma/adapter-pg": "^7.10.0",
     "@prisma/client": "^7.0.0",
     "better-auth": "^1.6.0",
     "dotenv": "^17.0.0",
     "express": "^5.0.0",
+    "openai": "^7.28.0",
     "pg": "^8.16.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
+    "ws": "^8.22.0",
     "zod": "^4.0.0"
   },
   "devDependencies": {
     "@types/express": "^5.0.0",
     "@types/node": "^24.0.0",
+    "@types/ws": "^8.18.2",
+    "prettier": "^3.9.9",
     "prisma": "^7.0.0",
     "tsc-watch": "^7.0.0",
     "typescript": "^5.9.0"

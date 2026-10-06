@@ -16,11 +16,11 @@ Copy `.env.example` to `.env` and set `EXPO_PUBLIC_API_URL` to the backend origi
 without `/api/auth`. Start the backend using the root README, then run `npm start`.
 On PowerShell use `npm.cmd` if script execution policy blocks `npm`.
 
-| Target | Backend URL example |
-| --- | --- |
-| Web / iOS simulator on the backend host | `http://localhost:3000` |
-| Android emulator | `http://10.0.2.2:3000` |
-| Physical phone on the same network | `http://192.168.1.20:3000` (your computer's LAN IP) |
+| Target                                  | Backend URL example                                 |
+| --------------------------------------- | --------------------------------------------------- |
+| Web / iOS simulator on the backend host | `http://localhost:3000`                             |
+| Android emulator                        | `http://10.0.2.2:3000`                              |
+| Physical phone on the same network      | `http://192.168.1.20:3000` (your computer's LAN IP) |
 
 Set backend `BETTER_AUTH_URL` to the reachable backend origin. Include `formcast://`
 in backend `TRUSTED_ORIGINS`. For web, also include the exact frontend origin
@@ -80,5 +80,11 @@ Device smoke test with a running backend:
 5. Relaunch the app; confirm session restoration. Sign out; protected routes must close.
 6. Stop the backend; verify request failures and retry after restarting it.
 
-The welcome screen is a placeholder for the job workspace. Audio, proposals, jobs UI,
-password reset, social sign-in, and email verification are not implemented here.
+The app includes job CRUD and native live voice capture with transcript/proposal previews,
+Finish and Cancel. Configure the two provider keys on the backend, then restart it.
+Use Expo Go with SDK 57 and the audio streaming API, or rebuild a development client
+after installing `expo-audio`. Voice requires microphone permission and a reachable
+backend WebSocket endpoint. Keep `formcast://` in backend trusted origins. The web
+preview supports CRUD; native voice is available on iPhone and Android. See the
+[voice architecture](../docs/voice-architecture.md) for protocol, limits and device checks.
+Password reset, social sign-in, and email verification are not implemented.

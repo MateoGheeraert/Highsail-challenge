@@ -1,7 +1,7 @@
-import { Controller, Get, Req, UseGuards } from '@nestjs/common';
-import { SessionGuard, type AuthenticatedRequest } from './session.guard.js';
+import { Controller, Get, Req, UseGuards } from "@nestjs/common";
+import { SessionGuard, type AuthenticatedRequest } from "./session.guard.js";
 
-@Controller('me')
+@Controller("me")
 @UseGuards(SessionGuard)
 export class MeController {
   @Get()

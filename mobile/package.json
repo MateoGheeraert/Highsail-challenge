@@ -9,7 +9,9 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
-    "export": "expo export"
+    "export": "expo export",
+    "format": "prettier . --write",
+    "format:check": "prettier . --check"
   },
   "dependencies": {
     "@better-auth/expo": "1.7.7",
@@ -18,6 +20,7 @@
     "babel-preset-expo": "~57.0.0",
     "better-auth": "1.7.7",
     "expo": "~57.0.0",
+    "expo-audio": "~57.0.5",
     "expo-constants": "~57.0.20",
     "expo-font": "~57.0.4",
     "expo-linking": "~57.0.11",
@@ -40,6 +43,7 @@
   },
   "devDependencies": {
     "@types/react": "~19.2.0",
+    "prettier": "^3.9.9",
     "tailwindcss": "^3.4.17",
     "typescript": "~6.0.3"
   }
