@@ -75,7 +75,7 @@ Device smoke test with a running backend:
 
 1. Switch between sign-in and registration; verify keyboard scrolling and password visibility.
 2. Submit empty/invalid fields, a short password, and mismatched confirmation.
-3. Register a unique email; expect the welcome screen. Sign out and sign in again.
+3. Register a unique email; expect the jobs list. Open Settings, log out and sign in again.
 4. Try invalid credentials; expect a readable error without losing the form.
 5. Relaunch the app; confirm session restoration. Sign out; protected routes must close.
 6. Stop the backend; verify request failures and retry after restarting it.

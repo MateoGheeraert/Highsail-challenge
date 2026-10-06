@@ -22,6 +22,7 @@ export default function RootLayout() {
             <Stack.Protected guard={!!session}>
               <Stack.Screen name="index" />
               <Stack.Screen name="jobs" />
+              <Stack.Screen name="settings" />
             </Stack.Protected>
           </Stack>
         )}

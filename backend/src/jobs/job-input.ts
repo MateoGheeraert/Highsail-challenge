@@ -6,7 +6,29 @@ const fields = z
     title: z.string().trim().min(1).max(160),
     generalRemarks: z.string().trim().max(5000).nullable().optional(),
     priority: z.enum(["low", "medium", "high"]).nullable().optional(),
-    jobComplete: z.boolean().nullable().optional(),
+    materials: z
+      .array(
+        z
+          .object({
+            id: z.string().min(1).max(100).optional(),
+            material: z.string().trim().min(1).max(200),
+            quantity: z.number().finite().min(0),
+            unit: z.enum(["m", "pcs"]),
+          })
+          .strict(),
+      )
+      .max(100)
+      .optional(),
+    scheduledAt: z.iso
+      .date()
+      .transform((value) => new Date(`${value}T00:00:00.000Z`))
+      .nullable()
+      .optional(),
+    jobCompletedAt: z.iso
+      .datetime({ offset: true })
+      .transform((value) => new Date(value))
+      .nullable()
+      .optional(),
   })
   .strict();
 

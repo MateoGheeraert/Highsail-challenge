@@ -77,21 +77,57 @@ export class JobsService {
   }
 
   create(ownerId: string, body: unknown) {
-    const data = parseJobInput(body);
+    const { materials, ...data } = parseJobInput(body);
+    if (materials?.some((row) => row.id))
+      throw new BadRequestException(
+        "New materials must not have an existing ID",
+      );
     return this.prisma.job.create({
-      data: { ...data, title: data.title!, ownerId },
+      data: {
+        ...data,
+        title: data.title!,
+        ownerId,
+        materials: {
+          create: materials?.map((row, position) => ({ ...row, position })),
+        },
+      },
       include: { materials: true },
     });
   }
 
   async update(ownerId: string, id: string, body: unknown) {
-    const data = parseJobInput(body, true);
+    const { materials, ...data } = parseJobInput(body, true);
     return this.prisma.$transaction(async (tx) => {
       const result = await tx.job.updateMany({
         where: { id, ownerId },
         data: { ...data, version: { increment: 1 } },
       });
       if (!result.count) throw new NotFoundException("Job not found");
+      if (materials !== undefined) {
+        const ids = materials.flatMap((row) => (row.id ? [row.id] : []));
+        if (new Set(ids).size !== ids.length)
+          throw new BadRequestException("Duplicate material IDs");
+        const existing = await tx.material.count({
+          where: { jobId: id, id: { in: ids } },
+        });
+        if (existing !== ids.length)
+          throw new BadRequestException("Material does not belong to this job");
+        await tx.material.deleteMany({
+          where: { jobId: id, id: { notIn: ids } },
+        });
+        for (const [position, row] of materials.entries()) {
+          const { id: materialId, ...values } = row;
+          if (materialId)
+            await tx.material.update({
+              where: { id: materialId },
+              data: { ...values, position },
+            });
+          else
+            await tx.material.create({
+              data: { ...values, position, jobId: id },
+            });
+        }
+      }
       return tx.job.findUniqueOrThrow({
         where: { id },
         include: {
@@ -113,7 +149,8 @@ export class JobsService {
       select: {
         id: true,
         title: true,
-        jobComplete: true,
+        scheduledAt: true,
+        jobCompletedAt: true,
         priority: true,
         version: true,
         updatedAt: true,

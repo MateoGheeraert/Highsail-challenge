@@ -91,7 +91,8 @@ model Job {
   arrivalTime    String?
   distanceKm     Float?
   generalRemarks String?
-  jobComplete    Boolean?
+  scheduledAt    DateTime? @db.Date
+  jobCompletedAt DateTime?
   priority       Priority?
   tags           Json     @default("[]")
   version        Int      @default(0)

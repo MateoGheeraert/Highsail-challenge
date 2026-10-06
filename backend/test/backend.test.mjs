@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { randomBytes } from "node:crypto";
 import "dotenv/config";
@@ -84,6 +85,43 @@ test("authentication and owned job persistence through the HTTP API", async (t) 
     let jobId;
 
     await t.test(
+      "date migration preserves legacy completion status",
+      async () => {
+        await admin.query("BEGIN");
+        try {
+          await admin.query(
+            'CREATE TEMP TABLE "Job" (id text, "updatedAt" timestamp(3), "jobComplete" boolean) ON COMMIT DROP',
+          );
+          await admin.query(
+            `INSERT INTO "Job" VALUES ('done', '2026-10-05 14:30:00', true), ('todo', '2026-10-05 14:30:00', false), ('unset', '2026-10-05 14:30:00', null)`,
+          );
+          await admin.query(
+            readFileSync(
+              new URL(
+                "../prisma/migrations/20261006160000_job_dates/migration.sql",
+                import.meta.url,
+              ),
+              "utf8",
+            ),
+          );
+          const result = await admin.query(
+            'SELECT id, "jobCompletedAt"::text AS completed, "scheduledAt" FROM "Job" ORDER BY id',
+          );
+          assert.deepEqual(
+            result.rows.map((row) => [row.id, row.completed, row.scheduledAt]),
+            [
+              ["done", "2026-10-05 14:30:00", null],
+              ["todo", null, null],
+              ["unset", null, null],
+            ],
+          );
+        } finally {
+          await admin.query("ROLLBACK");
+        }
+      },
+    );
+
+    await t.test(
       "health is public and jobs require a valid session",
       async () => {
         assert.equal((await request("/health")).status, 200);
@@ -138,7 +176,7 @@ test("authentication and owned job persistence through the HTTP API", async (t) 
       assert.deepEqual(job.tags, []);
       assert.deepEqual(job.materials, []);
       const schema = await (await request("/jobs/schema", cookie)).json();
-      assert.equal(schema.fields.length, 6);
+      assert.equal(schema.fields.length, 5);
     });
     await t.test("another user cannot read the demo job", async () => {
       const response = await request("/auth/sign-up/email", null, {
@@ -181,7 +219,11 @@ test("authentication and owned job persistence through the HTTP API", async (t) 
           { title: " " },
           { title: "x", priority: "critical" },
           { title: "x", ownerId: "someone" },
-          { title: "x", jobComplete: "yes" },
+          { title: "x", jobComplete: true },
+          { title: "x", jobCompletedAt: true },
+          { title: "x", jobCompletedAt: "2026-02-30T10:00:00Z" },
+          { title: "x", jobCompletedAt: "2026-10-06" },
+          { title: "x", scheduledAt: "2026-02-30" },
         ]) {
           assert.equal((await request("/jobs", cookie, body)).status, 400);
         }
@@ -189,7 +231,8 @@ test("authentication and owned job persistence through the HTTP API", async (t) 
           title: "  New installation  ",
           generalRemarks: "Inspect first",
           priority: "medium",
-          jobComplete: false,
+          jobCompletedAt: null,
+          scheduledAt: "2026-10-07",
         });
         assert.equal(created.status, 201);
         const job = await created.json();
@@ -209,18 +252,34 @@ test("authentication and owned job persistence through the HTTP API", async (t) 
             title: "Finished installation",
             generalRemarks: null,
             priority: null,
-            jobComplete: true,
+            jobCompletedAt: "2026-10-06T14:30:00+02:00",
           },
           "PATCH",
         );
         assert.equal(updated.status, 200);
         const saved = await (await request(`/jobs/${job.id}`, cookie)).json();
         assert.equal(saved.title, "Finished installation");
-        assert.equal(saved.jobComplete, true);
+        assert.equal(saved.jobCompletedAt, "2026-10-06T12:30:00.000Z");
+        assert.equal(saved.scheduledAt, "2026-10-07T00:00:00.000Z");
         assert.equal(saved.generalRemarks, null);
         assert.equal(saved.priority, null);
         assert.equal(saved.version, 1);
         assert.equal(saved.materials[0].id, material.id);
+        const reopened = await request(
+          `/jobs/${job.id}`,
+          cookie,
+          { jobCompletedAt: null, scheduledAt: null },
+          "PATCH",
+        );
+        assert.equal(reopened.status, 200);
+        const cleared = await reopened.json();
+        assert.equal(cleared.jobCompletedAt, null);
+        assert.equal(cleared.scheduledAt, null);
+        const listed = (await (await request("/jobs", cookie)).json()).find(
+          (item) => item.id === job.id,
+        );
+        assert.equal(listed.jobCompletedAt, null);
+        assert.equal(listed.scheduledAt, null);
         assert.equal(
           (await request(`/jobs/${job.id}`, cookie, {}, "PATCH")).status,
           400,
@@ -245,6 +304,100 @@ test("authentication and owned job persistence through the HTTP API", async (t) 
             .status,
           404,
         );
+      },
+    );
+    await t.test(
+      "manual materials create, edit, remove and enforce row ownership atomically",
+      async () => {
+        const created = await request("/jobs", cookie, {
+          title: "Manual materials",
+          materials: [{ material: "Cable", quantity: 12.5, unit: "m" }],
+        });
+        assert.equal(created.status, 201);
+        const job = await created.json();
+        const original = job.materials[0];
+        assert.equal(original.quantity, 12.5);
+        const path = "/jobs/" + job.id;
+        const updated = await request(
+          path,
+          cookie,
+          {
+            materials: [
+              { id: original.id, material: "Cable", quantity: 15, unit: "m" },
+              { material: "Screws", quantity: 40, unit: "pcs" },
+            ],
+          },
+          "PATCH",
+        );
+        assert.equal(updated.status, 200);
+        const saved = await updated.json();
+        assert.equal(saved.materials[0].id, original.id);
+        assert.equal(saved.materials[0].quantity, 15);
+        assert.equal(saved.materials[1].material, "Screws");
+        const omitted = await (
+          await request(path, cookie, { title: "Renamed" }, "PATCH")
+        ).json();
+        assert.equal(omitted.materials.length, 2);
+        const foreignJob = await (
+          await request("/jobs", cookie, {
+            title: "Other job",
+            materials: [{ material: "Pipe", quantity: 1, unit: "m" }],
+          })
+        ).json();
+        for (const materials of [
+          [
+            {
+              id: foreignJob.materials[0].id,
+              material: "Pipe",
+              quantity: 1,
+              unit: "m",
+            },
+          ],
+          [
+            { id: original.id, material: "Cable", quantity: 1, unit: "m" },
+            { id: original.id, material: "Cable", quantity: 2, unit: "m" },
+          ],
+          [{ material: "", quantity: 1, unit: "pcs" }],
+          [{ material: "Cable", quantity: -1, unit: "m" }],
+          [{ material: "Cable", quantity: 1, unit: "kg" }],
+        ]) {
+          assert.equal(
+            (
+              await request(
+                path,
+                cookie,
+                { title: "Must roll back", materials },
+                "PATCH",
+              )
+            ).status,
+            400,
+          );
+        }
+        const unchanged = await (await request(path, cookie)).json();
+        assert.equal(unchanged.title, "Renamed");
+        assert.equal(unchanged.version, omitted.version);
+        assert.equal(unchanged.materials.length, 2);
+        const removed = await (
+          await request(
+            path,
+            cookie,
+            {
+              materials: [
+                { id: original.id, material: "Cable", quantity: 0, unit: "m" },
+              ],
+            },
+            "PATCH",
+          )
+        ).json();
+        assert.equal(removed.materials.length, 1);
+        assert.equal(removed.materials[0].id, original.id);
+        assert.equal(removed.materials[0].quantity, 0);
+        const cleared = await (
+          await request(path, cookie, { materials: [] }, "PATCH")
+        ).json();
+        assert.deepEqual(cleared.materials, []);
+        await request(path, cookie, undefined, "DELETE");
+        await request("/jobs/" + foreignJob.id, cookie, undefined, "DELETE");
       },
     );
     await t.test(
@@ -530,7 +683,6 @@ test("authentication and owned job persistence through the HTTP API", async (t) 
             fieldOps: [
               { op: "clear", fieldKey: "arrivalTime", value: null },
               { op: "set", fieldKey: "distanceKm", value: 0 },
-              { op: "set", fieldKey: "jobComplete", value: false },
               { op: "set", fieldKey: "tags", value: ["warranty"] },
             ],
             lineOps: [
@@ -552,7 +704,7 @@ test("authentication and owned job persistence through the HTTP API", async (t) 
         );
         assert.equal(committed.arrivalTime, null);
         assert.equal(committed.distanceKm, 0);
-        assert.equal(committed.jobComplete, false);
+        assert.equal(committed.jobCompletedAt, null);
         assert.deepEqual(committed.tags, ["warranty"]);
         assert.equal(committed.materials.length, 1);
         assert.equal(committed.materials[0].id, latest.materials[0].id);

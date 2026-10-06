@@ -1,7 +1,15 @@
+import { goBack } from "@/lib/navigation";
 import { useEffect, useState } from "react";
 import { Platform, View } from "react-native";
-import { router, useLocalSearchParams } from "expo-router";
-import { BrandMark, Button, Notice, Screen, Text } from "@/components";
+import { useLocalSearchParams } from "expo-router";
+import {
+  BrandMark,
+  Button,
+  IconButton,
+  Notice,
+  Screen,
+  Text,
+} from "@/components";
 import { jobsApi, type Job } from "@/features/jobs/api";
 import { JobValues } from "@/features/jobs/job-values";
 import { useVoiceSession } from "@/features/voice/use-voice-session";
@@ -47,13 +55,12 @@ export default function Speak() {
   return (
     <Screen>
       <View className="gap-6">
-        <Button
-          variant="text"
+        <IconButton
+          icon="arrow-left"
+          label="Back to job"
           disabled={!idle}
-          onPress={() => router.replace(`/jobs/${id}`)}
-        >
-          Back to job
-        </Button>
+          onPress={() => goBack(`/jobs/${id}`)}
+        />
         {error ? (
           <>
             <Notice>{error}</Notice>

@@ -64,7 +64,7 @@ and the backend minimum. Sign-in only checks that a password is present.
 Submitting disables the form and navigation action. Request errors preserve input and
 offer a retry. Better Auth manages sessions with SecureStore on native platforms and
 browser cookies on web. Protected routes prevent returning to auth screens while signed
-in. The initial authenticated screen lists owned jobs with creation and sign-out actions. Job details support editing and confirmed deletion. The speaking screen streams native microphone audio, shows interim transcripts and amber proposal cards, and provides Finish/Cancel. Saved form values and material rows are displayed on the job detail screen.
+in. The initial authenticated screen lists owned jobs in compact To do and Completed sections, ordered by scheduled date and completion time. Settings contains account details and logout. Job details support editing and confirmed deletion. The speaking screen streams native microphone audio, shows interim transcripts and amber proposal cards, and provides Finish/Cancel. Saved form values and material rows are displayed on the job detail screen.
 
 ## Implementation references
 

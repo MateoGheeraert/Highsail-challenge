@@ -4,7 +4,6 @@ export const fieldKeys = [
   "arrivalTime",
   "distanceKm",
   "generalRemarks",
-  "jobComplete",
   "priority",
   "tags",
 ] as const;
@@ -18,7 +17,6 @@ const validators = {
     .nullable(),
   distanceKm: z.number().finite().min(0).nullable(),
   generalRemarks: z.string().max(5000).nullable(),
-  jobComplete: z.boolean().nullable(),
   priority: z.enum(["low", "medium", "high"]).nullable(),
   tags,
 };
@@ -49,7 +47,7 @@ export const proposalSchema = z
           })
           .strict(),
       )
-      .max(6),
+      .max(5),
     lineOps: z
       .array(
         z
@@ -74,7 +72,8 @@ export type JobSnapshot = {
   arrivalTime: string | null;
   distanceKm: number | null;
   generalRemarks: string | null;
-  jobComplete: boolean | null;
+  scheduledAt: Date | string | null;
+  jobCompletedAt: Date | string | null;
   priority: "low" | "medium" | "high" | null;
   tags: unknown;
   materials: Array<{

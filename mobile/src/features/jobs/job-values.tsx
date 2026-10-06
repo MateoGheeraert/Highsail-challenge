@@ -8,7 +8,6 @@ const labels: Record<FieldKey, string> = {
   arrivalTime: "Arrival time",
   distanceKm: "Distance travelled (km)",
   generalRemarks: "General remarks",
-  jobComplete: "Job complete",
   priority: "Priority",
   tags: "Tags",
 };
@@ -44,22 +43,22 @@ export function JobValues({
   for (const op of proposal?.lineOps || [])
     if (op.op === "create") rows.push({ id: op.lineId, op });
   return (
-    <View className="gap-4">
+    <View className='gap-4'>
       {(Object.keys(labels) as FieldKey[]).map((key) => {
         const op = proposal?.fieldOps.find((op) => op.fieldKey === key);
         return (
           <View
             key={key}
-            className="gap-1 p-4"
+            className='gap-1 p-4'
             style={[
               { borderRadius: 12, backgroundColor: colors.surface },
               op && proposedStyle,
             ]}
           >
-            <Text variant="label">{labels[key]}</Text>
+            <Text variant='label'>{labels[key]}</Text>
             {op ? (
               <>
-                <Text variant="caption" style={{ color: colors.proposed }}>
+                <Text variant='caption' style={{ color: colors.proposed }}>
                   Proposed ·{" "}
                   {op.op === "clear"
                     ? "Clear"
@@ -69,7 +68,7 @@ export function JobValues({
                       : "Update"}
                 </Text>
                 <Text>{display(op.value)}</Text>
-                <Text variant="caption" muted>
+                <Text variant='caption' muted>
                   Saved: {display(job[key])}
                 </Text>
               </>
@@ -79,21 +78,21 @@ export function JobValues({
           </View>
         );
       })}
-      <Text variant="heading">Materials used</Text>
+      <Text variant='heading'>Materials used</Text>
       {!rows.length && <Text muted>No materials yet.</Text>}
       {rows.map(({ id, original, op }) => {
         const values = op?.values || original;
         return (
           <View
             key={id}
-            className="gap-1 p-4"
+            className='gap-1 p-4'
             style={[
               { borderRadius: 12, backgroundColor: colors.surface },
               op && proposedStyle,
             ]}
           >
             {op && (
-              <Text variant="caption" style={{ color: colors.proposed }}>
+              <Text variant='caption' style={{ color: colors.proposed }}>
                 Proposed ·{" "}
                 {op.op === "create"
                   ? "Create"
@@ -113,7 +112,7 @@ export function JobValues({
               {values?.unit || "(unit missing)"}
             </Text>
             {op?.op === "update" && (
-              <Text variant="caption" muted>
+              <Text variant='caption' muted>
                 Saved: {original?.material} · {original?.quantity}{" "}
                 {original?.unit}
               </Text>

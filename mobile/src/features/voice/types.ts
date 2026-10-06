@@ -1,12 +1,7 @@
 import type { Job } from "@/features/jobs/api";
 
 export type FieldKey =
-  | "arrivalTime"
-  | "distanceKm"
-  | "generalRemarks"
-  | "jobComplete"
-  | "priority"
-  | "tags";
+  "arrivalTime" | "distanceKm" | "generalRemarks" | "priority" | "tags";
 export type Proposal = {
   fieldOps: {
     op: "set" | "clear";

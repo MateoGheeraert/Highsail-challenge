@@ -25,7 +25,8 @@ const base = {
   arrivalTime: null,
   distanceKm: null,
   generalRemarks: null,
-  jobComplete: null,
+  scheduledAt: null,
+  jobCompletedAt: null,
   priority: null,
   tags: [],
   materials: [],
@@ -170,7 +171,7 @@ try {
   const extendedPreview = previewProposal(base, extended);
   assert.equal(extendedPreview.priority, "high");
   assert.deepEqual(extendedPreview.tags, ["warranty"]);
-  assert.equal(extendedPreview.jobComplete, true);
+  assert.equal(extendedPreview.jobCompletedAt, null);
   assert.match(extendedPreview.generalRemarks, /access panel replaced/i);
   assert.equal(extendedPreview.materials.length, 1);
   assert.equal(extendedPreview.materials[0].id, preview.materials[0].id);

@@ -1,5 +1,5 @@
 export const FORM_SCHEMA = {
-  version: 1,
+  version: 2,
   fields: [
     {
       key: "arrivalTime",
@@ -19,12 +19,6 @@ export const FORM_SCHEMA = {
       key: "generalRemarks",
       label: "General remarks",
       type: "text",
-      nullable: true,
-    },
-    {
-      key: "jobComplete",
-      label: "Job complete",
-      type: "boolean",
       nullable: true,
     },
     {

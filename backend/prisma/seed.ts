@@ -8,14 +8,16 @@ if (config.NODE_ENV === "production")
   throw new Error("Demo seeding is disabled in production");
 const prisma = new PrismaService(config);
 try {
-  const email = (process.env.DEMO_EMAIL ?? "demo@formcast.local").toLowerCase();
+  const email = (
+    process.env.DEMO_EMAIL ?? "mateogheeraert04@gmail.com"
+  ).toLowerCase();
   let user = await prisma.user.findUnique({ where: { email } });
   if (!user) {
     const password = process.env.DEMO_PASSWORD;
     if (!password || password.length < 12)
       throw new Error("Set DEMO_PASSWORD to at least 12 characters");
     const result = await createAuth(prisma, config).api.signUpEmail({
-      body: { email, password, name: "Demo Technician" },
+      body: { email, password, name: "Mateo Gheeeraert" },
     });
     user = await prisma.user.findUniqueOrThrow({
       where: { id: result.user.id },
@@ -36,14 +38,16 @@ try {
       title: "Boiler inspection",
       priority: "high" as const,
       generalRemarks: "Check the pressure and inspect the connections.",
-      jobComplete: false,
+      scheduledAt: new Date("2026-10-07T00:00:00.000Z"),
+      jobCompletedAt: null,
     },
     {
       key: "maintenance",
       title: "Ventilation maintenance",
       priority: "low" as const,
       generalRemarks: "Filters replaced and airflow checked.",
-      jobComplete: true,
+      scheduledAt: new Date("2026-10-05T00:00:00.000Z"),
+      jobCompletedAt: new Date("2026-10-05T14:30:00.000Z"),
     },
   ]) {
     const { key, ...data } = job;

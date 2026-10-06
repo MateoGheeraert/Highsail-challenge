@@ -1,9 +1,11 @@
+import { goBack } from "@/lib/navigation";
 import { useCallback, useState } from "react";
 import { View } from "react-native";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
-import { Button, Notice, Screen, Text } from "@/components";
+import { Button, IconButton, Notice, Screen, Text } from "@/components";
 import { jobsApi, type Job } from "@/features/jobs/api";
 import { JobForm } from "@/features/jobs/job-form";
+import { completedLabel, scheduledLabel } from "@/features/jobs/dates";
 import { JobValues } from "@/features/jobs/job-values";
 
 export default function JobDetail() {
@@ -41,7 +43,7 @@ export default function JobDetail() {
     setError("");
     try {
       await jobsApi.delete(id);
-      router.replace("/");
+      router.dismissTo("/");
     } catch (error) {
       setError(
         error instanceof Error ? error.message : "Could not delete job.",
@@ -52,16 +54,64 @@ export default function JobDetail() {
   }
   return (
     <Screen>
-      <View className="gap-6">
+      <View style={{ gap: 24 }}>
         {!editing && (
-          <Button
-            variant="text"
-            disabled={deleting}
-            onPress={() => router.replace("/")}
+          <View
+            style={{
+              flexDirection: "row",
+              justifyContent: "space-between",
+              alignItems: "center",
+            }}
           >
-            Back to jobs
-          </Button>
+            <IconButton
+              icon="arrow-left"
+              label="Back to jobs"
+              disabled={deleting}
+              onPress={() => goBack()}
+            />
+            {job && !loading && (
+              <View style={{ flexDirection: "row", gap: 8 }}>
+                <IconButton
+                  icon="pencil-outline"
+                  label="Edit job"
+                  disabled={deleting}
+                  onPress={() => {
+                    setConfirmDelete(false);
+                    setEditing(true);
+                  }}
+                />
+                <IconButton
+                  icon="trash-can-outline"
+                  label="Delete job"
+                  destructive
+                  disabled={deleting}
+                  onPress={() => setConfirmDelete(true)}
+                />
+              </View>
+            )}
+          </View>
         )}
+        {confirmDelete && job ? (
+          <View className="gap-3">
+            <Notice>
+              Delete this job and all its saved details? This cannot be undone.
+            </Notice>
+            <Button
+              icon="trash-can-outline"
+              loading={deleting}
+              onPress={remove}
+            >
+              Delete permanently
+            </Button>
+            <Button
+              variant="text"
+              disabled={deleting}
+              onPress={() => setConfirmDelete(false)}
+            >
+              Keep job
+            </Button>
+          </View>
+        ) : null}
         {error ? (
           <View className="gap-2">
             <Notice>{error}</Notice>
@@ -78,7 +128,6 @@ export default function JobDetail() {
         ) : job ? (
           editing ? (
             <>
-              <Text variant="title">Edit job</Text>
               <JobForm
                 initial={job}
                 onCancel={() => setEditing(false)}
@@ -92,12 +141,15 @@ export default function JobDetail() {
             <>
               <Text variant="title">{job.title}</Text>
               <Text muted>
-                {job.jobComplete === true
-                  ? "Complete"
-                  : job.jobComplete === false
-                    ? "In progress"
-                    : "Not started"}{" "}
+                {job.jobCompletedAt
+                  ? `Completed ${completedLabel(job.jobCompletedAt)}`
+                  : "To do"}{" "}
                 · {job.priority ? `${job.priority} priority` : "No priority"}
+              </Text>
+              <Text muted>
+                {job.scheduledAt
+                  ? `Scheduled ${scheduledLabel(job.scheduledAt)}`
+                  : "Unscheduled"}
               </Text>
               <JobValues job={job} />
               <Button
@@ -106,38 +158,6 @@ export default function JobDetail() {
               >
                 Open speaking screen
               </Button>
-              <Button
-                variant="secondary"
-                disabled={deleting}
-                onPress={() => {
-                  setConfirmDelete(false);
-                  setEditing(true);
-                }}
-              >
-                Edit job
-              </Button>
-              {confirmDelete ? (
-                <View className="gap-3">
-                  <Notice>
-                    Delete this job and all its saved details? This cannot be
-                    undone.
-                  </Notice>
-                  <Button loading={deleting} onPress={remove}>
-                    Delete permanently
-                  </Button>
-                  <Button
-                    variant="text"
-                    disabled={deleting}
-                    onPress={() => setConfirmDelete(false)}
-                  >
-                    Keep job
-                  </Button>
-                </View>
-              ) : (
-                <Button variant="text" onPress={() => setConfirmDelete(true)}>
-                  Delete job
-                </Button>
-              )}
             </>
           )
         ) : null}

@@ -5,7 +5,8 @@ export type Job = {
   title: string;
   generalRemarks: string | null;
   priority: "low" | "medium" | "high" | null;
-  jobComplete: boolean | null;
+  scheduledAt: string | null;
+  jobCompletedAt: string | null;
   version: number;
   updatedAt: string;
   arrivalTime: string | null;
@@ -22,12 +23,22 @@ export type Material = {
 };
 export type JobSummary = Pick<
   Job,
-  "id" | "title" | "jobComplete" | "priority" | "version" | "updatedAt"
+  | "id"
+  | "title"
+  | "scheduledAt"
+  | "jobCompletedAt"
+  | "priority"
+  | "version"
+  | "updatedAt"
 >;
 export type JobInput = Pick<
   Job,
-  "title" | "generalRemarks" | "priority" | "jobComplete"
->;
+  "title" | "generalRemarks" | "priority" | "scheduledAt" | "jobCompletedAt"
+> & {
+  materials?: Array<
+    Pick<Material, "material" | "quantity" | "unit"> & { id?: string }
+  >;
+};
 
 const request = <T>(path: string, method = "GET", body?: JobInput) =>
   apiRequest<T>(`/jobs${path}`, method, body);

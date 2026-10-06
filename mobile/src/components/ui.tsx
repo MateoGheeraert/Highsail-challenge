@@ -2,6 +2,7 @@
 import { useState, type PropsWithChildren } from "react";
 import {
   View,
+  Pressable,
   type TextInputProps,
   type StyleProp,
   type TextStyle,
@@ -77,12 +78,14 @@ export function Button({
   loading,
   disabled,
   accessibilityLabel,
+  icon,
 }: PropsWithChildren<{
   onPress: () => void;
   variant?: "primary" | "secondary" | "text";
   loading?: boolean;
   disabled?: boolean;
   accessibilityLabel?: string;
+  icon?: string;
 }>) {
   return (
     <PaperButton
@@ -92,6 +95,7 @@ export function Button({
         ] as "contained" | "outlined" | "text"
       }
       onPress={onPress}
+      icon={icon}
       loading={loading}
       disabled={disabled || loading}
       accessibilityLabel={accessibilityLabel}
@@ -101,6 +105,55 @@ export function Button({
     >
       {children}
     </PaperButton>
+  );
+}
+
+export function AppIcon({
+  name,
+  size = 22,
+  color = colors.muted,
+}: {
+  name: string;
+  size?: number;
+  color?: string;
+}) {
+  return <Icon source={name} size={size} color={color} />;
+}
+
+export function IconButton({
+  icon,
+  label,
+  onPress,
+  disabled,
+  destructive = false,
+}: {
+  icon: string;
+  label: string;
+  onPress: () => void;
+  disabled?: boolean;
+  destructive?: boolean;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled: !!disabled }}
+      disabled={disabled}
+      onPress={onPress}
+      style={({ pressed }) => ({
+        width: 48,
+        height: 48,
+        borderRadius: 12,
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: pressed ? colors.primarySoft : colors.surface,
+        borderWidth: 1,
+        borderColor: colors.border,
+        opacity: disabled ? 0.4 : 1,
+      })}
+    >
+      <AppIcon name={icon} color={destructive ? colors.error : colors.ink} />
+    </Pressable>
   );
 }
 

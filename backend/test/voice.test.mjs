@@ -19,7 +19,8 @@ const base = {
   arrivalTime: "09:00",
   distanceKm: null,
   generalRemarks: null,
-  jobComplete: null,
+  scheduledAt: null,
+  jobCompletedAt: null,
   priority: null,
   tags: [],
   materials: [
@@ -43,7 +44,7 @@ const row = (op, lineId, values) => ({
   issues: [],
 });
 
-test("retraction restores committed data; clear is a real change; zero and false survive", () => {
+test("retraction restores committed data; clear is a real change; zero survives", () => {
   assert.equal(
     previewProposal(
       base,
@@ -64,10 +65,11 @@ test("retraction restores committed data; clear is a real change; zero and false
       .distanceKm,
     0,
   );
-  assert.equal(
-    previewProposal(base, normalizeProposal(field("jobComplete", false), base))
-      .jobComplete,
-    false,
+  assert.throws(() =>
+    normalizeProposal(field("jobCompletedAt", "2026-10-06T12:30:00Z"), base),
+  );
+  assert.throws(() =>
+    normalizeProposal(field("scheduledAt", "2026-10-07"), base),
   );
   assert.equal(
     normalizeProposal(field("arrivalTime", "09:00"), base).fieldOps.length,
