@@ -6,6 +6,10 @@ A field technician speaks continuously to fill a structured job form and materia
 
 The backend uses NestJS 11 (Express 5), Better Auth with its Expo plugin, Prisma 7, and PostgreSQL hosted on Neon. The mobile app uses Expo Router, React Native Paper behind shared UI wrappers, and NativeWind. Deepgram Nova-3 transcribes streamed audio, and GPT-5 mini interprets the transcript into validated form proposals.
 
+## Demo
+
+[Watch the demo video](docs/demo.mp4)
+
 ## Documentation
 
 | Guide | Contents |
