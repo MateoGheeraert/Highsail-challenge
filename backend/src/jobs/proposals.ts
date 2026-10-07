@@ -64,6 +64,11 @@ export const proposalSchema = z
   })
   .strict();
 export type Proposal = z.infer<typeof proposalSchema>;
+// Omission is not a material removal. The interpreter must explicitly retract
+// a pending operation to restore the committed row or discard a pending create.
+export const interpretationSchema = proposalSchema.extend({
+  retractedLineIds: z.array(z.string().min(1).max(100)).max(100),
+});
 export type MaterialValues = z.infer<typeof materialValues>;
 export type JobSnapshot = {
   id: string;
@@ -210,4 +215,37 @@ export function savableProposal(input: unknown, base: JobSnapshot): Proposal {
     }
   }
   return result;
+}
+
+export function reconcileMaterialProposals(
+  input: z.infer<typeof interpretationSchema>,
+  previous: Proposal,
+  base: JobSnapshot,
+): Proposal {
+  const next = savableProposal(input, base);
+  const rows = new Map(previous.lineOps.map((op) => [op.lineId, op]));
+  const incomingIds = new Set(input.lineOps.map((op) => op.lineId));
+  for (const id of input.retractedLineIds) {
+    // Conflicting instructions in the same response do not silently delete a row.
+    if (!incomingIds.has(id)) rows.delete(id);
+  }
+  for (const op of input.lineOps) {
+    if (
+      input.lineOps.filter((other) => other.lineId === op.lineId).length !== 1
+    )
+      continue;
+    try {
+      const valid = normalizeProposal(
+        { ...emptyProposal(), lineOps: [op] },
+        base,
+      );
+      if (valid.issues.length) continue;
+      if (valid.lineOps.length) rows.set(op.lineId, valid.lineOps[0]!);
+      else rows.delete(op.lineId); // A correction back to the committed value.
+    } catch {
+      /* Keep the last valid row when a correction is incomplete. */
+    }
+  }
+  // The preview and persistence boundary share the same limits and validation.
+  return savableProposal({ ...next, lineOps: [...rows.values()] }, base);
 }

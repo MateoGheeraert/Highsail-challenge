@@ -2,8 +2,8 @@ import { Injectable } from "@nestjs/common";
 import { OpenAiService } from "../ai/openai.service.js";
 import { FORM_SCHEMA } from "../jobs/form-schema.js";
 import {
-  savableProposal,
-  proposalSchema,
+  reconcileMaterialProposals,
+  interpretationSchema,
   type JobSnapshot,
   type Proposal,
 } from "../jobs/proposals.js";
@@ -28,9 +28,12 @@ Hours use HH:mm, distance is km. Preserve zero. Tags are unique and restricted t
 Material create ops use stable new:<identifier> lineId values. Reuse a previous proposed ID for the same row. 
 Existing row update/delete must use an exact committed row ID. Update values contain all three resulting cells, preserving unchanged existing cells. Create/update values may contain null for genuinely missing cells. Delete values must be null.
 'Used twelve meters of cable and forty screws' creates Cable/12/m and Screws/40/pcs. 
-'Make the cable fifteen meters' revises that same row, not a new row. 
-'Forget the screws' removes a proposed create entirely; for a committed screw row it proposes delete. 
-Never emit update/delete for new: IDs; revise/remove their create op.
+'Make the cable fifteen meters' revises that same row, not a new row. Keep Screws/40/pcs unchanged with its previous lineId.
+'Change it to 15 meters' targets Cable when it is the only row measured in meters; it does not affect screws measured in pieces. If multiple meter-based rows are plausible, leave them unchanged rather than guessing.
+Omitting a previously proposed material means unchanged. Never omit a previous row as a way to remove it. Return retractedLineIds (an empty array unless needed) to explicitly discard previous pending operations after a spoken removal, retraction or recognition correction.
+'Forget the screws' puts the pending screw create's exact previous lineId in retractedLineIds; for a committed screw row it proposes delete instead.
+'Scrap that' can restore the earlier cable quantity without removing screws. Retracting a pending update/delete restores the committed row. Never retract unrelated rows.
+Never emit update/delete for new: IDs; revise their create op or explicitly retract the create. Never put the same ID in both lineOps and retractedLineIds.
 Interpret the entire transcript in chronological order, including temporary rows created and then removed within the transcript even if they never appeared in previousProposals.
 A named row created earlier in this transcript is a clear reference. DO NOT ask whether a clearly removed proposed row should be recorded, 
 and do NOT report an issue merely because that row is absent from committedJob.
@@ -52,7 +55,7 @@ export class ProposalInterpreter {
     if (!transcript.trim())
       return { fieldOps: [], lineOps: [], issues: [] } satisfies Proposal;
     const output = await this.ai.structured(
-      proposalSchema,
+      interpretationSchema,
       instructions,
       {
         schema: FORM_SCHEMA,
@@ -62,6 +65,6 @@ export class ProposalInterpreter {
       },
       signal,
     );
-    return savableProposal(output, base);
+    return reconcileMaterialProposals(output, previous, base);
   }
 }

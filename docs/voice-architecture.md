@@ -60,13 +60,13 @@ operations and incomplete material rows are omitted before publishing the previe
 never mutates the preview. No tools, autonomous agent loop or database access are
 given to GPT. Prompts treat transcript/job text as data, not system instructions.
 
-The patch list is replaced, not appended:
+The client receives a complete preview on every revision. Before publishing, the server reconciles material operations by their stable IDs: omitted rows remain unchanged, valid corrections replace only the targeted row, and retractedLineIds explicitly removes pending operations. An incomplete correction keeps the last valid version of that row.
 
 - Scalars have set/clear operations. Retraction removes a proposal and restores the
   saved value. Explicit clear saves null; clearing tags saves an empty array.
 - Existing material rows use database IDs. New rows use stable `new:<identifier>`
   IDs until commit. Updating a pending row revises its create operation; forgetting
-  it removes that operation. Deleting an existing row produces a delete operation.
+  it explicitly retracts that operation. Deleting an existing row produces a delete operation.
 - Material updates carry all three resulting cells. Missing cells cause that operation
   to be skipped. Invalid operations and issue messages are not published; valid unrelated
   changes remain visible and saveable.

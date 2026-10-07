@@ -7,11 +7,13 @@ import {
   previewProposal,
   emptyProposal,
   savableProposal,
+  reconcileMaterialProposals,
 } from "../dist/src/jobs/proposals.js";
 import { Transcript } from "../dist/src/voice/transcript.js";
 import { InferenceScheduler } from "../dist/src/voice/inference-scheduler.js";
 import { VoiceSessionService } from "../dist/src/voice/voice-session.service.js";
 import { SessionStore } from "../dist/src/voice/session-store.js";
+import { ProposalInterpreter } from "../dist/src/voice/proposal-interpreter.js";
 
 const base = {
   id: "job",
@@ -628,5 +630,191 @@ test("Finish with no displayed suggestions saves no guessed changes", async (t) 
   assert.equal(
     f.events.some((event) => event.type === "warning"),
     false,
+  );
+});
+
+test("a cable quantity correction preserves omitted screws and stable row identities", async () => {
+  const emptyBase = { ...base, materials: [] };
+  const cable = {
+    op: "create",
+    groupKey: "materials",
+    lineId: "new:cable",
+    values: { material: "Cable", quantity: 12, unit: "m" },
+  };
+  const screws = {
+    op: "create",
+    groupKey: "materials",
+    lineId: "new:screws",
+    values: { material: "Screws", quantity: 40, unit: "pcs" },
+  };
+  const outputs = [
+    {
+      fieldOps: [],
+      lineOps: [cable, screws],
+      issues: [],
+      retractedLineIds: [],
+    },
+    {
+      fieldOps: [],
+      lineOps: [{ ...cable, values: { ...cable.values, quantity: 15 } }],
+      issues: [],
+      retractedLineIds: [],
+    },
+  ];
+  const interpreter = new ProposalInterpreter({
+    structured: async (schema, _instructions, input) => {
+      if (outputs.length === 1)
+        assert.equal(input.previousProposals.lineOps.length, 2);
+      return schema.parse(outputs.shift());
+    },
+  });
+  const initial = await interpreter.interpret(
+    emptyBase,
+    emptyProposal(),
+    "I used twelve meters of cable and forty screws.",
+    new AbortController().signal,
+  );
+  const corrected = await interpreter.interpret(
+    emptyBase,
+    initial,
+    "I used twelve meters of cable and forty screws. Change it to fifteen meters.",
+    new AbortController().signal,
+  );
+  assert.deepEqual(
+    corrected.lineOps.map((op) => [op.lineId, op.values.quantity]),
+    [
+      ["new:cable", 15],
+      ["new:screws", 40],
+    ],
+  );
+  assert.equal(previewProposal(emptyBase, corrected).materials.length, 2);
+  assert.equal(
+    initial.lineOps[0].values.quantity,
+    12,
+    "Previous preview stays immutable",
+  );
+  const removed = reconcileMaterialProposals(
+    { ...emptyProposal(), retractedLineIds: ["new:screws"] },
+    corrected,
+    emptyBase,
+  );
+  assert.deepEqual(
+    removed.lineOps.map((op) => op.lineId),
+    ["new:cable"],
+  );
+});
+
+test("incomplete material corrections preserve good rows; reverting to saved values retracts only that update", () => {
+  const initial = {
+    ...emptyProposal(),
+    lineOps: [
+      {
+        op: "update",
+        groupKey: "materials",
+        lineId: "existing-cable",
+        values: { material: "Cable", quantity: 15, unit: "m" },
+      },
+      {
+        op: "create",
+        groupKey: "materials",
+        lineId: "new:screws",
+        values: { material: "Screws", quantity: 40, unit: "pcs" },
+      },
+    ],
+  };
+  const incomplete = reconcileMaterialProposals(
+    {
+      ...emptyProposal(),
+      lineOps: [
+        {
+          ...initial.lineOps[0],
+          values: { material: "Cable", quantity: null, unit: "m" },
+        },
+      ],
+      retractedLineIds: [],
+    },
+    initial,
+    base,
+  );
+  assert.deepEqual(incomplete, initial);
+  const restored = reconcileMaterialProposals(
+    {
+      ...emptyProposal(),
+      lineOps: [
+        {
+          ...initial.lineOps[0],
+          values: { material: "Cable", quantity: 12, unit: "m" },
+        },
+      ],
+      retractedLineIds: [],
+    },
+    initial,
+    base,
+  );
+  assert.deepEqual(
+    restored.lineOps.map((op) => op.lineId),
+    ["new:screws"],
+  );
+  const retracted = reconcileMaterialProposals(
+    { ...emptyProposal(), retractedLineIds: ["existing-cable"] },
+    initial,
+    base,
+  );
+  assert.deepEqual(retracted, restored);
+});
+
+test("corrected cable and untouched screws survive preview acceptance and Finish", async (t) => {
+  const interpreter = new ProposalInterpreter({
+    structured: async (schema, _instructions, input) =>
+      schema.parse({
+        fieldOps: [],
+        issues: [],
+        retractedLineIds: [],
+        lineOps: input.transcript.includes("fifteen")
+          ? [
+              {
+                op: "update",
+                groupKey: "materials",
+                lineId: "existing-cable",
+                values: { material: "Cable", quantity: 15, unit: "m" },
+              },
+            ]
+          : [
+              {
+                op: "create",
+                groupKey: "materials",
+                lineId: "new:screws",
+                values: { material: "Screws", quantity: 40, unit: "pcs" },
+              },
+            ],
+      }),
+  });
+  const f = fixture(t, {
+    inference: (...args) => interpreter.interpret(...args),
+  });
+  const { session } = await connect(f);
+  f.report({
+    start: 0,
+    duration: 2,
+    text: "I used twelve meters of cable and forty screws.",
+    isFinal: true,
+  });
+  await session.scheduler.flush();
+  f.report({
+    start: 2,
+    duration: 1,
+    text: "Change it to fifteen meters.",
+    isFinal: false,
+  });
+  await session.scheduler.flush();
+  const revision = session.proposalRevision;
+  await f.voice.stop(session, revision);
+  const saved = await f.voice.finish("owner", session.id, revision);
+  assert.deepEqual(
+    saved.materials.map((row) => [row.material, row.quantity, row.unit]),
+    [
+      ["Cable", 15, "m"],
+      ["Screws", 40, "pcs"],
+    ],
   );
 });
