@@ -193,12 +193,9 @@ export default function Jobs() {
               borderRadius: 6,
             })}
           >
-            <AppIcon
-              name={
-                job.jobCompletedAt ? "check-circle-outline" : "circle-outline"
-              }
-              color={job.jobCompletedAt ? colors.primary : colors.muted}
-            />
+            {job.jobCompletedAt && (
+              <AppIcon name="check-circle-outline" color={colors.primary} />
+            )}
             <View style={{ flex: 1, gap: 8 }}>
               <Text
                 variant="label"

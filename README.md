@@ -1,8 +1,22 @@
 # Formcast
 
-NestJS backend and Expo mobile app for the live voice form challenge. Speak continuously to preview proposed job changes, then press Finish to save or Cancel to discard them.
+Formcast is my implementation of the Live Voice Form Filler challenge for my application to the **AI Engineer** role at **HighScale**.
 
-The backend uses NestJS 11 (Express 5), Better Auth with its Expo plugin, Prisma 7, and PostgreSQL hosted on Neon. The mobile app uses Expo Router, React Native Paper behind shared UI wrappers, and NativeWind. See [mobile setup](mobile/README.md) and the [mobile design guide](docs/mobile-design.md).
+A field technician speaks continuously to fill a structured job form and material rows. The Expo mobile app shows proposed changes as they speak, including corrections to earlier statements. **Finish** saves the remaining proposals; **Cancel** discards them. Proposed changes stay separate from saved job data until Finish.
+
+The backend uses NestJS 11 (Express 5), Better Auth with its Expo plugin, Prisma 7, and PostgreSQL hosted on Neon. The mobile app uses Expo Router, React Native Paper behind shared UI wrappers, and NativeWind. Deepgram Nova-3 transcribes streamed audio, and GPT-5 mini interprets the transcript into validated form proposals.
+
+## Documentation
+
+| Guide | Contents |
+| --- | --- |
+| [Challenge brief](docs/Highsail%20challenge.md) | Original product brief, requirements, demo script and evaluation criteria |
+| [Technology stack](docs/techstack.md) | Technologies used, their responsibilities and the reasoning behind the choices |
+| [Voice architecture](docs/voice-architecture.md) | Streaming, inference, proposal revisions, Finish/Cancel, verification, limitations and what I would improve with another day |
+| [Mobile design](docs/mobile-design.md) | Visual design, shared components, navigation and interaction conventions |
+| [Mobile setup](mobile/README.md) | Mobile configuration and instructions for running the app |
+
+Backend setup, API endpoints and verification commands are below.
 
 ## Run the backend
 

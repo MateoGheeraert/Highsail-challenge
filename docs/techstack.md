@@ -1,63 +1,46 @@
-Updated frontend stack:
+﻿# Technology stack
 
-- Expo + React Native + TypeScript — mobile app foundation.
-- Expo Router — navigation.
-- NativeWind — Tailwind CSS syntax in React Native, e.g. className="flex-1 bg-white px-4".
-- React Native Paper — ready-made components such as buttons, inputs, chips, dialogs and activity indicators.
-- TanStack Query — fetching committed job data and handling mutations like Finish.
-- expo-audio — live microphone PCM streaming.
-- Native WebSocket — realtime audio upload + proposal/transcript updates.
-- Better Auth + @better-auth/expo — authentication if we have enough time.
-  So for styling/component responsibilities:
-  React Native Paper
-  → functional components
-  → Button, TextInput, Chip, Dialog, ActivityIndicator...
+Formcast is a mobile job-management app with optional voice form filling. The stack supports two paths: technicians can edit jobs and materials manually, or speak and review proposed changes before saving. The choices favour a small, understandable application with clear boundaries between UI, speech processing and saved data.
 
-NativeWind
-→ layout + custom visual styling
-→ spacing, flex, borders, colors, proposed states...
+This document describes the current implementation. See the [setup guide](../README.md), [mobile design guide](mobile-design.md) and [voice architecture](voice-architecture.md) for more detail.
 
-For example, the proposal UI could be something like:
-<View className="rounded-xl border-2 border-dashed border-amber-400 bg-amber-50 p-4">
-<Text className="text-xs font-semibold uppercase text-amber-700">
-Proposed
-</Text>
+## Mobile app
 
-  <Text className="mt-1 text-lg font-semibold">
-    10:00
-  </Text>
-</View>
+| Technology                           | Why it fits this project                                                                                                                                                                    | How we use it                                                                                                                                                                                                      |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Expo + React Native**              | One app codebase for iPhone and Android, with access to native features such as the microphone. Expo supplies the development tooling and native modules, reducing platform-specific setup. | React components describe the interface and React Native renders platform UI. Expo modules provide device capabilities. The web build supports job CRUD; voice capture currently requires the native app.          |
+| **TypeScript**                       | Jobs, materials and voice events cross several layers. Explicit types help catch mismatched fields and invalid property access during development.                                          | Adds static type checking to JavaScript in both app and backend. It does not validate incoming network data; the server uses Zod for that.                                                                         |
+| **Expo Router**                      | File-based routes keep navigation close to the screens they represent. Stack navigation matches the jobs list → detail → speaking flow.                                                     | Files under `mobile/src/app` define routes. Protected routes follow the authentication session; back actions pop navigation history, with a fallback for direct links.                                             |
+| **React Native Paper**               | Standard controls such as buttons and text inputs need consistent interaction, disabled states and visual styling. Reusing them reduces custom UI work.                                     | App-owned wrappers in `src/components` adapt Paper controls to our theme. Feature screens import these wrappers, keeping the UI-library dependency concentrated in one place.                                      |
+| **NativeWind + React Native styles** | Utility classes make common layouts concise, while explicit styles give control over calendar grids, list separators and spacing.                                                           | NativeWind translates Tailwind-style `className` utilities for React Native. Shared theme tokens and native `style` objects handle custom appearance. Paper supplies controls; these tools arrange and style them. |
+| **React hooks + `fetch`**            | The current CRUD screens have modest data requirements, so a separate query cache or global state library is unnecessary for this scope.                                                    | A shared API helper sends authenticated HTTP requests. Hooks hold loading, error and form state; the jobs list reloads when focused. **TanStack Query is not currently installed or used.**                        |
 
-That combination is a good fit because Paper saves time on standard controls, while NativeWind lets us quickly make the proposal/committed distinction visually clear without fighting Paper's styling system.
-So our final main stack is:
-Frontend
-Expo
-React Native
-TypeScript
-Expo Router
-React Native Paper
-NativeWind / Tailwind
-TanStack Query
-expo-audio
+## Backend and persistence
 
-Realtime
-WebSocket
+| Technology                         | Why it fits this project                                                                                                                                                      | How it works here                                                                                                                                                                                                                                            |
+| ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **NestJS on Node.js / Express**    | Authentication, job writes, provider calls and voice sessions need distinct responsibilities. Nest's module structure makes those boundaries explicit.                        | Controllers handle HTTP requests, guards check sessions, and injected services perform the work. `JobsModule` owns saved job data, `VoiceModule` coordinates speech sessions, and `AiModule` wraps external providers.                                       |
+| **Zod**                            | Requests and AI responses cannot be trusted merely because the application uses TypeScript. Runtime validation is needed before applying changes.                             | Schemas check actual values, including allowed units, dates and quantities. Additional domain checks reject foreign material IDs and invalid proposal operations. Invalid edits do not get committed.                                                        |
+| **Better Auth + Expo integration** | Password and session handling should use a dedicated authentication library. The Expo integration connects the same backend login flow to native clients.                     | Better Auth manages email/password authentication and database-backed sessions. Native session storage uses SecureStore; browser clients use cookies. Server guards authenticate requests, and job queries enforce ownership. Authentication is implemented. |
+| **Prisma**                         | Typed database queries and versioned migrations keep the relational model manageable as job fields evolve.                                                                    | The Prisma schema defines users, jobs and materials; migrations update PostgreSQL. Transactions save related changes together, so a failed material edit rolls back the job update too.                                                                      |
+| **PostgreSQL, hosted on Neon**     | Jobs have owners and repeating material rows, which fit a relational database. Constraints and transactions support consistent saved data. Neon provides the hosted database. | PostgreSQL stores committed records and relationships. Prisma accesses it through the PostgreSQL adapter. Stable material IDs allow both manual edits and voice proposals to address the same rows.                                                          |
 
-Backend
-NestJS
-@nestjs/platform-ws
-Zod
-Better Auth
+## Voice and live updates
 
-AI
-Deepgram Nova-3 → speech-to-text
-GPT-5 mini → structured proposal generation
+| Technology                          | Why it fits this project                                                                                                                                                    | How it works here                                                                                                                                                                                                                                                                                |
+| ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **`expo-audio`**                    | The app needs microphone samples while the technician is speaking, without waiting for a complete recording.                                                                | Native audio capture produces PCM buffers: samples representing the sound waveform. The app batches and sends them to the backend.                                                                                                                                                               |
+| **WebSocket + Nest's `ws` adapter** | Audio travels to the server while transcripts and proposals travel back. A persistent two-way connection supports both directions without polling.                          | The native client sends binary audio and receives JSON events. A short-lived, single-use ticket attaches the socket to an authenticated voice session. CRUD and final save requests use HTTP.                                                                                                    |
+| **Deepgram Nova-3**                 | Streaming transcription supplies text while speech continues, allowing the form preview to update during dictation.                                                         | The backend forwards audio to Deepgram and receives interim and final transcripts. Interim text can be revised; the app keeps it distinct from finalized speech.                                                                                                                                 |
+| **GPT-5 mini**                      | Interpreting corrections and mapping natural speech onto a fixed form requires more than keyword matching. The model's role is limited to producing structured suggestions. | The backend sends the transcript, saved job and previous proposals. Structured output describes field and material operations, which the backend validates. A complete replacement proposal list lets corrections revise or retract earlier suggestions. The model cannot write to the database. |
+| **In-memory `Map` in NestJS**       | Pending suggestions are temporary and should remain separate from saved jobs. A process-local store keeps this challenge's implementation small.                            | Holds voice sessions, transcripts and proposals until Finish, Cancel or expiry. This assumes one backend instance; a restart loses pending sessions. Multiple instances would require a shared-state design.                                                                                     |
 
-Database
-Prisma
-PostgreSQL
+## How the pieces work together
 
-Temporary proposal state
-NestJS in-memory Map
+Manual edits follow **app → authenticated HTTP API → validation → Prisma transaction → PostgreSQL**. Calendar inputs display `dd/mm/yyyy`; the API uses ISO dates. Materials can be entered manually, so speech is optional.
 
-I would consider that stack locked in now; there isn't much benefit to adding Redux, Zustand, LiveKit, Socket.IO or another UI framework for this challenge.
+Voice follows **microphone → WebSocket → Deepgram transcript → GPT proposals → validated preview**. Provider keys stay on the backend. Only one interpretation request runs at a time; newer transcript revisions are combined into the next request to avoid an accumulating queue.
+
+**Finish** waits for the remaining speech and interpretation, validates the proposal, checks that the saved job version has not changed, and commits in one transaction. **Cancel** discards pending suggestions. Scheduling and completion dates remain manual fields outside voice proposals.
+
+The current scope does not require Redux, Zustand, Socket.IO, LiveKit or Redis. Adding caching, reconnect support or multiple backend instances would be a reason to revisit those choices, rather than adding another layer pre-emptively.
