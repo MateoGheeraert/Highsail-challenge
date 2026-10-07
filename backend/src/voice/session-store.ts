@@ -26,6 +26,7 @@ export type VoiceSession = {
   transcript: Transcript;
   proposal: Proposal;
   proposalRevision: number;
+  previews: Map<number, Proposal>;
   abort: AbortController;
   scheduler: InferenceScheduler<string, Proposal>;
   speech?: SpeechStream;

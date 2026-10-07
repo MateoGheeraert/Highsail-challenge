@@ -6,6 +6,8 @@ export class InferenceScheduler<T, R> {
   private attempted = -1;
   private applied = -1;
   private lastStarted = 0;
+  private pendingSince?: number;
+  private lastRequested = 0;
   private closed = false;
   private flushing = false;
   private error: unknown;
@@ -18,8 +20,14 @@ export class InferenceScheduler<T, R> {
   ) {}
 
   request(revision: number, input: T) {
-    if (this.closed) return;
+    if (this.closed || (this.latest && revision <= this.latest.revision))
+      return;
+    const now = Date.now();
+    this.pendingSince ??= now;
+    this.lastRequested = now;
     this.latest = { revision, input };
+    clearTimeout(this.timer);
+    this.timer = undefined;
     this.schedule();
   }
 
@@ -38,13 +46,25 @@ export class InferenceScheduler<T, R> {
         this.timer = undefined;
         void this.run();
       },
-      Math.max(0, this.interval - (Date.now() - this.lastStarted)),
+      // Wait briefly for a partial phrase to settle, but keep previewing during
+      // continuous speech. Never postpone beyond one interval of queued input.
+      Math.max(
+        0,
+        Math.max(
+          this.lastStarted + this.interval,
+          Math.min(
+            this.lastRequested + Math.min(350, this.interval),
+            (this.pendingSince ?? Date.now()) + this.interval,
+          ),
+        ) - Date.now(),
+      ),
     );
   }
 
   private run(): Promise<void> {
     if (this.closed || !this.latest) return Promise.resolve();
     const current = this.latest;
+    this.pendingSince = undefined;
     this.attempted = current.revision;
     this.lastStarted = Date.now();
     this.running = (async () => {
@@ -57,7 +77,10 @@ export class InferenceScheduler<T, R> {
         }
       } catch (error) {
         this.error = error;
-        if (!this.closed) this.failed(error);
+        // A newer transcript is already queued to replace this incomplete one.
+        // Keep the last valid preview and let that request recover quietly.
+        if (!this.closed && current.revision === this.latest?.revision)
+          this.failed(error);
       }
     })().finally(() => {
       this.running = undefined;

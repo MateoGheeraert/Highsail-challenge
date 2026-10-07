@@ -580,9 +580,11 @@ test("authentication and owned job persistence through the HTTP API", async (t) 
         });
         assert.equal(before.arrivalTime, null);
         assert.equal(before.materials.length, 0);
-        first.ws.send(JSON.stringify({ type: "stop" }));
+        first.ws.send(
+          JSON.stringify({ type: "stop", revision: preview.revision }),
+        );
         const ready = await first.wait("ready");
-        assert.equal(ready.proposal.fieldOps[0].value, "10:00");
+        assert.equal(ready.proposal.fieldOps[0].value, "11:00");
         assert.equal(receivedAudio, 3200);
         assert.equal(
           (
@@ -602,7 +604,7 @@ test("authentication and owned job persistence through the HTTP API", async (t) 
         for (const response of finishes)
           assert.equal(response.status, 201, await response.clone().text());
         const saved = await finishes[0].json();
-        assert.equal(saved.arrivalTime, "10:00");
+        assert.equal(saved.arrivalTime, "11:00");
         assert.equal(saved.materials.length, 1);
         assert.equal(saved.version, 1);
         first.ws.close();

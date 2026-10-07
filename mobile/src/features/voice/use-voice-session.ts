@@ -33,6 +33,7 @@ const NativeWebSocket = WebSocket as unknown as {
 export function useVoiceSession(jobId: string) {
   const [stage, setStage] = useState<Stage>("idle");
   const [snapshot, setSnapshot] = useState<Job | null>(null);
+  const [proposalRevision, setProposalRevision] = useState(0);
   const [proposal, setProposal] = useState<Proposal>(emptyProposal);
   const [transcript, setTranscript] = useState({ final: "", interim: "" });
   const [thinking, setThinking] = useState(false);
@@ -213,6 +214,7 @@ export function useVoiceSession(jobId: string) {
     setError("");
     setWarning("");
     setProposal(emptyProposal());
+    setProposalRevision(0);
     setTranscript({ final: "", interim: "" });
     setThinking(false);
     current.revision = 0;
@@ -328,12 +330,18 @@ export function useVoiceSession(jobId: string) {
             setWarning("");
           } else if (
             message.type === "proposals" &&
+            current.stage === "listening" &&
             message.revision >= current.revision
           ) {
             current.revision = message.revision;
+            setProposalRevision(message.revision);
             setProposal(message.proposal);
             setWarning("");
-          } else if (message.type === "thinking") setThinking(message.active);
+          } else if (
+            message.type === "thinking" &&
+            current.stage === "listening"
+          )
+            setThinking(message.active);
           else if (message.type === "warning") setWarning(message.message);
           else if (message.type === "ready") {
             clearInterval(current.watchdog);
@@ -341,12 +349,7 @@ export function useVoiceSession(jobId: string) {
             current.finalRevision = message.revision;
             setProposal(message.proposal);
             changeStage("review");
-            if (!message.proposal.issues.length)
-              void save(message.revision, generation);
-            else
-              setError(
-                "Nothing was saved. Cancel and start again to resolve the remaining details.",
-              );
+            void save(message.revision, generation);
           } else if (message.type === "committed") {
             setSnapshot(message.job);
             setProposal(emptyProposal());
@@ -402,22 +405,24 @@ export function useVoiceSession(jobId: string) {
       return;
     }
     if (current.stage !== "listening") return;
-    const generation = current.generation;
     changeStage("stopping");
     setWarning("");
     try {
-      stream.stop();
-      // Let already-dispatched native buffer events reach JS before the stop marker.
-      await new Promise((resolve) => setTimeout(resolve, 100));
-      if (!current.active || generation !== current.generation) return;
+      // Capture the revision rendered with this Finish handler, not a newer
+      // socket event that React has not displayed yet.
+      current.finalRevision = proposalRevision;
       stopMic();
-      flushAudio();
+      current.buffers = [];
+      current.bytes = 0;
+      setThinking(false);
       if (current.socket?.readyState !== WebSocket.OPEN)
         throw new Error(
           "Voice connection lost before Finish. Nothing was saved.",
         );
       changeStage("draining");
-      current.socket.send(JSON.stringify({ type: "stop" }));
+      current.socket.send(
+        JSON.stringify({ type: "stop", revision: proposalRevision }),
+      );
       current.startedAt = Date.now();
       current.watchdog = setInterval(() => {
         if (

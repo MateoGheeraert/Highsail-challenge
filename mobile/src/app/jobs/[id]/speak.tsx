@@ -46,7 +46,7 @@ export default function Speak() {
     starting: "Connecting microphone…",
     listening: "Listening",
     stopping: "Finishing audio…",
-    draining: "Processing your final words…",
+    draining: "Preparing visible changes…",
     review: "Review remaining details",
     saving: "Saving your job…",
     saved: "Changes saved",
@@ -85,7 +85,7 @@ export default function Speak() {
               <Text muted>
                 {voice.stage === "saved"
                   ? "Your proposed changes are now saved to this job."
-                  : "Describe your work and correct yourself naturally. Nothing is saved until you press Finish."}
+                  : "Finish saves the suggestions shown below. Wait for the preview to update before finishing."}
               </Text>
               {voice.stage === "listening" && (
                 <View
@@ -118,10 +118,7 @@ export default function Speak() {
                 <>
                   <Button
                     loading={busy}
-                    disabled={
-                      voice.proposal.issues.length > 0 ||
-                      !["listening", "review"].includes(voice.stage)
-                    }
+                    disabled={!["listening", "review"].includes(voice.stage)}
                     onPress={() => void voice.finish()}
                   >
                     {voice.stage === "review" ? "Retry Finish" : "Finish"}
@@ -137,10 +134,12 @@ export default function Speak() {
               )}
             </View>
             {voice.error ? <Notice>{voice.error}</Notice> : null}
-            {voice.warning ? <Notice>{voice.warning}</Notice> : null}
-            {voice.proposal.issues.map((issue, index) => (
-              <Notice key={`${index}:${issue}`}>{issue}</Notice>
-            ))}
+            {voice.warning ? (
+              <Text variant="caption" muted>
+                {voice.warning}
+              </Text>
+            ) : null}
+
             {(voice.transcript.final || voice.transcript.interim || !idle) && (
               <View className="gap-2">
                 <Text variant="label">Live transcript</Text>

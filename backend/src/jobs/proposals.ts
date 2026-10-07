@@ -167,3 +167,47 @@ export function previewProposal(base: JobSnapshot, proposal: Proposal) {
   }
   return preview;
 }
+
+// Publish only operations that can be saved. One unfinished row must not hide
+// unrelated valid fields; rejected operations never enter the visible preview.
+export function savableProposal(input: unknown, base: JobSnapshot): Proposal {
+  const envelope = z
+    .object({
+      fieldOps: z.array(z.unknown()).max(5),
+      lineOps: z.array(z.unknown()).max(100),
+    })
+    .parse(input);
+  const result = emptyProposal();
+  for (const [key, identity] of [
+    ["fieldOps", "fieldKey"],
+    ["lineOps", "lineId"],
+  ] as const) {
+    const counts = new Map<unknown, number>();
+    for (const op of envelope[key]) {
+      const id =
+        op && typeof op === "object"
+          ? (op as Record<string, unknown>)[identity]
+          : undefined;
+      counts.set(id, (counts.get(id) ?? 0) + 1);
+    }
+    for (const op of envelope[key]) {
+      try {
+        const id =
+          op && typeof op === "object"
+            ? (op as Record<string, unknown>)[identity]
+            : undefined;
+        if (counts.get(id) !== 1) continue;
+        const normalized = normalizeProposal(
+          { ...emptyProposal(), [key]: [op] },
+          base,
+        );
+        if (normalized.issues.length) continue;
+        result.fieldOps.push(...normalized.fieldOps);
+        result.lineOps.push(...normalized.lineOps);
+      } catch {
+        /* Invalid suggestions are omitted, not shown as errors. */
+      }
+    }
+  }
+  return result;
+}

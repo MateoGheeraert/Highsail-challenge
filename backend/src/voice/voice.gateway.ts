@@ -23,7 +23,12 @@ const controlSchema = z.discriminatedUnion("type", [
       encoding: z.literal("int16"),
     })
     .strict(),
-  z.object({ type: z.literal("stop") }).strict(),
+  z
+    .object({
+      type: z.literal("stop"),
+      revision: z.number().int().nonnegative().optional(),
+    })
+    .strict(),
   z.object({ type: z.literal("cancel") }).strict(),
 ]);
 
@@ -112,7 +117,7 @@ export class VoiceGateway implements OnGatewayConnection {
         if (command.type === "audio.start")
           void this.voice.start(session, command).catch(reject);
         else if (command.type === "stop")
-          void this.voice.stop(session).catch(reject);
+          void this.voice.stop(session, command.revision).catch(reject);
         else this.voice.cancel(session.ownerId, session.id);
       } catch {
         reject();

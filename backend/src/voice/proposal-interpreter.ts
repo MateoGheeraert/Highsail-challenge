@@ -2,7 +2,7 @@ import { Injectable } from "@nestjs/common";
 import { OpenAiService } from "../ai/openai.service.js";
 import { FORM_SCHEMA } from "../jobs/form-schema.js";
 import {
-  normalizeProposal,
+  savableProposal,
   proposalSchema,
   type JobSnapshot,
   type Proposal,
@@ -62,6 +62,6 @@ export class ProposalInterpreter {
       },
       signal,
     );
-    return normalizeProposal(output, base);
+    return savableProposal(output, base);
   }
 }

@@ -6,6 +6,7 @@ import {
   normalizeProposal,
   previewProposal,
   emptyProposal,
+  savableProposal,
 } from "../dist/src/jobs/proposals.js";
 import { Transcript } from "../dist/src/voice/transcript.js";
 import { InferenceScheduler } from "../dist/src/voice/inference-scheduler.js";
@@ -259,6 +260,93 @@ test("canceled inference never publishes late results", async () => {
   assert.equal(published, false);
 });
 
+test("scheduler waits for a brief pause and coalesces 100ms transcript corrections", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 10_000 });
+  const called = [];
+  const scheduler = new InferenceScheduler(
+    async (input) => {
+      called.push(input);
+      return input;
+    },
+    () => {},
+    () => {},
+  );
+  t.after(() => scheduler.close());
+  scheduler.request(1, "Used twelve");
+  t.mock.timers.tick(100);
+  scheduler.request(2, "Used twelve meters of cable");
+  t.mock.timers.tick(349);
+  assert.deepEqual(called, []);
+  t.mock.timers.tick(1);
+  assert.deepEqual(called, ["Used twelve meters of cable"]);
+  await scheduler.flush();
+});
+
+test("continuous speech cannot postpone inference indefinitely", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 10_000 });
+  const called = [];
+  const scheduler = new InferenceScheduler(
+    async (input) => {
+      called.push(input);
+      return input;
+    },
+    () => {},
+    () => {},
+  );
+  t.after(() => scheduler.close());
+  scheduler.request(1, "word 1");
+  for (let revision = 2; revision <= 10; revision++) {
+    t.mock.timers.tick(100);
+    scheduler.request(revision, `word ${revision}`);
+  }
+  assert.deepEqual(called, []);
+  t.mock.timers.tick(100);
+  assert.deepEqual(called, ["word 10"]);
+  await scheduler.flush();
+});
+
+test("a superseded failure is silent and Finish processes the newest transcript", async () => {
+  let rejectFirst;
+  const failures = [];
+  const published = [];
+  const scheduler = new InferenceScheduler(
+    (input) =>
+      input === "partial"
+        ? new Promise((_resolve, reject) => {
+            rejectFirst = reject;
+          })
+        : Promise.resolve(input),
+    (result) => published.push(result),
+    (error) => failures.push(error),
+    0,
+  );
+  scheduler.request(1, "partial");
+  await delay(10);
+  scheduler.request(2, "complete");
+  const finishing = scheduler.flush();
+  rejectFirst(new Error("incomplete interpretation"));
+  await finishing;
+  assert.deepEqual(failures, []);
+  assert.deepEqual(published, ["complete"]);
+  scheduler.close();
+});
+
+test("Finish bypasses debounce but still rejects a failed final interpretation", async () => {
+  let called = 0;
+  const scheduler = new InferenceScheduler(
+    async () => {
+      called++;
+      throw new Error("provider unavailable");
+    },
+    () => {},
+    () => {},
+  );
+  scheduler.request(1, "final words");
+  await assert.rejects(() => scheduler.flush(), /provider unavailable/);
+  assert.equal(called, 1);
+  scheduler.close();
+});
+
 function fixture(t, { inference, drainError = false, empty = false } = {}) {
   let report;
   let commits = 0;
@@ -372,7 +460,7 @@ test("Cancel, drain failure, and empty microphone never commit", async (t) => {
   }
 });
 
-test("incomplete proposals cannot be committed", async (t) => {
+test("incomplete suggestions are skipped instead of blocking the visible preview", async (t) => {
   const f = fixture(t, {
     inference: async () =>
       normalizeProposal(
@@ -386,10 +474,40 @@ test("incomplete proposals cannot be committed", async (t) => {
   });
   const { session } = await connect(f);
   await f.voice.stop(session);
-  await assert.rejects(() =>
-    f.voice.finish("owner", session.id, session.proposalRevision),
+  assert.deepEqual(session.proposal, emptyProposal());
+  const saved = await f.voice.finish(
+    "owner",
+    session.id,
+    session.proposalRevision,
   );
-  assert.equal(f.commits(), 0);
+  assert.deepEqual(saved.materials, base.materials);
+  assert.equal(f.commits(), 1);
+});
+
+test("unfinished live material details recover before Finish validates them", async (t) => {
+  const f = fixture(t, {
+    inference: async (_base, _previous, text) =>
+      text.includes("ten")
+        ? field("arrivalTime", "10:00")
+        : normalizeProposal(
+            row("create", "new:cable", {
+              material: "Cable",
+              quantity: null,
+              unit: null,
+            }),
+            base,
+          ),
+  });
+  const { session } = await connect(f);
+  f.report({ start: 0, duration: 1, text: "Used cable", isFinal: false });
+  await session.scheduler.flush();
+  assert.deepEqual(session.proposal, emptyProposal());
+  assert.equal(session.status, "listening");
+  await f.voice.stop(session);
+  assert.equal(session.status, "ready");
+  assert.deepEqual(session.proposal.issues, []);
+  await f.voice.finish("owner", session.id, session.proposalRevision);
+  assert.equal(f.commits(), 1);
 });
 
 test("finalizing unchanged words updates the transcript UI without duplicate inference", async (t) => {
@@ -422,4 +540,93 @@ test("Cancel during drain prevents a late ready event or save", async (t) => {
     false,
   );
   assert.equal(f.commits(), 0);
+});
+
+test("savable previews keep valid fields and skip invalid or incomplete operations", () => {
+  const result = savableProposal(
+    {
+      fieldOps: [
+        { op: "set", fieldKey: "distanceKm", value: 0 },
+        { op: "clear", fieldKey: "arrivalTime", value: null },
+        { op: "set", fieldKey: "priority", value: "invalid" },
+      ],
+      lineOps: [
+        {
+          op: "create",
+          groupKey: "materials",
+          lineId: "new:incomplete",
+          values: { material: "Pipe", quantity: null, unit: "m" },
+        },
+        {
+          op: "create",
+          groupKey: "materials",
+          lineId: "new:screws",
+          values: { material: "Screws", quantity: 4, unit: "pcs" },
+        },
+        {
+          op: "delete",
+          groupKey: "materials",
+          lineId: "foreign",
+          values: null,
+        },
+      ],
+      issues: ["Incomplete phrase"],
+    },
+    base,
+  );
+  assert.equal(result.fieldOps.length, 2);
+  assert.equal(result.lineOps.length, 1);
+  assert.equal(result.lineOps[0].lineId, "new:screws");
+  assert.deepEqual(result.issues, []);
+  assert.deepEqual(normalizeProposal(result, base), result);
+});
+
+test("Finish accepts the displayed revision, not newer or still-running inference", async (t) => {
+  let completeLate;
+  const f = fixture(t, {
+    inference: async (_base, _previous, text) => {
+      if (text === "pending")
+        return new Promise((resolve) => {
+          completeLate = resolve;
+        });
+      return field("arrivalTime", text === "first" ? "11:00" : "12:00");
+    },
+  });
+  const { session } = await connect(f);
+  f.report({ start: 0, duration: 1, text: "first", isFinal: false });
+  await session.scheduler.flush();
+  const displayedRevision = session.proposalRevision;
+  f.report({ start: 0, duration: 1, text: "second", isFinal: false });
+  await session.scheduler.flush();
+  assert.equal(session.proposal.fieldOps[0].value, "12:00");
+  f.report({ start: 0, duration: 1, text: "pending", isFinal: false });
+  const running = session.scheduler.flush();
+  await delay(0);
+  await assert.rejects(() => f.voice.stop(session, 999));
+  await f.voice.stop(session, displayedRevision);
+  completeLate(field("arrivalTime", "13:00"));
+  await assert.rejects(() => running, /ended/);
+  const saved = await f.voice.finish("owner", session.id, displayedRevision);
+  assert.equal(saved.arrivalTime, "11:00");
+  assert.equal(session.proposalRevision, displayedRevision);
+  await f.voice.finish("owner", session.id, displayedRevision);
+  assert.equal(f.commits(), 1);
+});
+
+test("Finish with no displayed suggestions saves no guessed changes", async (t) => {
+  const f = fixture(t, {
+    inference: async () => {
+      throw new Error("provider failed");
+    },
+  });
+  const { session } = await connect(f);
+  f.report({ start: 0, duration: 1, text: "partial words", isFinal: false });
+  await f.voice.stop(session, 0);
+  const saved = await f.voice.finish("owner", session.id, 0);
+  assert.equal(saved.arrivalTime, base.arrivalTime);
+  assert.deepEqual(saved.materials, base.materials);
+  assert.equal(
+    f.events.some((event) => event.type === "warning"),
+    false,
+  );
 });

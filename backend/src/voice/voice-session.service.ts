@@ -12,7 +12,11 @@ import { randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { APP_CONFIG, type AppConfig } from "../config.js";
 import { DeepgramService, type AudioFormat } from "../ai/deepgram.service.js";
 import { JobsService } from "../jobs/jobs.service.js";
-import { emptyProposal, previewProposal } from "../jobs/proposals.js";
+import {
+  emptyProposal,
+  previewProposal,
+  savableProposal,
+} from "../jobs/proposals.js";
 import { ProposalInterpreter } from "./proposal-interpreter.js";
 import { InferenceScheduler } from "./inference-scheduler.js";
 import { SessionStore, type VoiceSession } from "./session-store.js";
@@ -64,6 +68,7 @@ export class VoiceSessionService implements OnModuleDestroy {
       transcript: new Transcript(),
       proposal: emptyProposal(),
       proposalRevision: 0,
+      previews: new Map([[0, emptyProposal()]]),
       abort: new AbortController(),
       audioBytes: 0,
       lastAudioAt: 0,
@@ -79,8 +84,12 @@ export class VoiceSessionService implements OnModuleDestroy {
           );
         },
         (proposal, revision) => {
+          proposal = savableProposal(proposal, session.base);
           session.proposal = proposal;
           session.proposalRevision = revision;
+          session.previews.set(revision, structuredClone(proposal));
+          if (session.previews.size > 32)
+            session.previews.delete(session.previews.keys().next().value!);
           this.emit(session, {
             type: "proposals",
             proposal,
@@ -91,11 +100,7 @@ export class VoiceSessionService implements OnModuleDestroy {
         },
         () => {
           this.emit(session, { type: "thinking", active: false });
-          this.emit(session, {
-            type: "warning",
-            message:
-              "Could not interpret the latest speech. Continue speaking to retry, or try Finish again.",
-          });
+          // Keep the last valid visible preview; a failed suggestion is skipped.
         },
       ),
     };
@@ -200,7 +205,7 @@ export class VoiceSessionService implements OnModuleDestroy {
     session.speech.send(data);
   }
 
-  async stop(session: VoiceSession) {
+  async stop(session: VoiceSession, visibleRevision?: number) {
     if (session.status === "ready") {
       this.emitReady(session);
       return;
@@ -208,6 +213,22 @@ export class VoiceSessionService implements OnModuleDestroy {
     if (session.status === "draining") return;
     if (session.status !== "listening")
       throw new BadRequestException("Speech has not started.");
+    if (visibleRevision !== undefined) {
+      const visible = session.previews.get(visibleRevision);
+      if (!visible)
+        throw new ConflictException(
+          "This preview expired. Restart speaking before saving.",
+        );
+      session.proposal = structuredClone(visible);
+      session.proposalRevision = visibleRevision;
+      session.status = "ready";
+      session.expiresAt = Date.now() + 5 * 60_000;
+      // Freeze before closing providers so late results cannot alter acceptance.
+      this.release(session);
+      this.emit(session, { type: "thinking", active: false });
+      this.emitReady(session);
+      return;
+    }
     session.status = "draining";
     this.emit(session, { type: "draining" });
     try {

@@ -41,6 +41,6 @@ Manual edits follow **app → authenticated HTTP API → validation → Prisma t
 
 Voice follows **microphone → WebSocket → Deepgram transcript → GPT proposals → validated preview**. Provider keys stay on the backend. Only one interpretation request runs at a time; newer transcript revisions are combined into the next request to avoid an accumulating queue.
 
-**Finish** waits for the remaining speech and interpretation, validates the proposal, checks that the saved job version has not changed, and commits in one transaction. **Cancel** discards pending suggestions. Scheduling and completion dates remain manual fields outside voice proposals.
+**Finish** freezes the validated suggestions currently displayed, checks that the saved job version has not changed, and commits in one transaction. Incomplete or invalid suggestions are skipped before display; late speech processing does not change the accepted preview. **Cancel** discards pending suggestions. Scheduling and completion dates remain manual fields outside voice proposals.
 
 The current scope does not require Redux, Zustand, Socket.IO, LiveKit or Redis. Adding caching, reconnect support or multiple backend instances would be a reason to revisit those choices, rather than adding another layer pre-emptively.
